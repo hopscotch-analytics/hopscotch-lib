@@ -48,6 +48,8 @@ class StepSankeyWidget(anywidget.AnyWidget):
     widget_id    = traitlets.Unicode("").tag(sync=True)
     height       = traitlets.Int(500).tag(sync=True)
     sidebar_open = traitlets.Bool(True).tag(sync=True)
+    # 0 = use default (3); >0 = show only this many variable columns per anchor
+    step_window  = traitlets.Int(0).tag(sync=True)
 
     # ── persistent state ──────────────────────────────────────────────────────
     node_positions = traitlets.Unicode("{}").tag(sync=True)
@@ -69,6 +71,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
         path_pattern=_UNSET,
         height=_UNSET,
         sidebar_open=_UNSET,
+        step_window=_UNSET,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -98,6 +101,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
         self.path_pattern = path_pattern if path_pattern is not _UNSET else (p.get("path_pattern") or "")
         self.height       = height       if height       is not _UNSET else d.get("height",       500)
         self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else d.get("sidebar_open",  True)
+        self.step_window  = step_window  if step_window  is not _UNSET else d.get("step_window",   0)
         self.node_positions = json.dumps(saved.get("node_positions", {}))
 
         self._recompute()
@@ -213,6 +217,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 "display": {
                     "height":       self.height,
                     "sidebar_open": self.sidebar_open,
+                    "step_window":  self.step_window,
                 },
                 "node_positions": json.loads(self.node_positions or "{}"),
             }
