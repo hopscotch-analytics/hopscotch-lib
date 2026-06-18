@@ -161,15 +161,20 @@ class Eventstream:
         max_steps: int = 10,
         diff: T_Diff = None,
         path_id_col: str | None = None,
+        path_pattern: str | None = None,
     ):
         from hopscotch.tools.step_matrix import StepMatrix
-        return StepMatrix(self).fit(max_steps=max_steps, diff=diff, path_id_col=path_id_col)
+        return StepMatrix(self).fit(
+            max_steps=max_steps, diff=diff,
+            path_id_col=path_id_col, path_pattern=path_pattern,
+        )
 
     def step_sankey(
         self,
         max_steps=None,
         diff=None,
         path_id_col=None,
+        path_pattern=None,
         height=None,
         sidebar_open=None,
         object_name: str | None = None,
@@ -180,11 +185,12 @@ class Eventstream:
             eventstream=self,
             object_name=object_name,
             load_from=load_from,
-            max_steps=max_steps       if max_steps    is not None else _UNSET,
-            diff=diff                 if diff         is not None else _UNSET,
-            path_id_col=path_id_col   if path_id_col  is not None else _UNSET,
-            height=height             if height       is not None else _UNSET,
-            sidebar_open=sidebar_open if sidebar_open is not None else _UNSET,
+            max_steps=max_steps         if max_steps    is not None else _UNSET,
+            diff=diff                   if diff         is not None else _UNSET,
+            path_id_col=path_id_col     if path_id_col  is not None else _UNSET,
+            path_pattern=path_pattern   if path_pattern is not None else _UNSET,
+            height=height               if height       is not None else _UNSET,
+            sidebar_open=sidebar_open   if sidebar_open is not None else _UNSET,
         )
 
     def transition_graph(

@@ -30,9 +30,10 @@ class StepSankeyWidget(anywidget.AnyWidget):
     widget_type  = traitlets.Unicode("step_sankey").tag(sync=True)
 
     # ── recompute triggers ────────────────────────────────────────────────────
-    max_steps   = traitlets.Int(10).tag(sync=True)
-    diff        = traitlets.Unicode("").tag(sync=True)   # "" | '["col","v1","v2"]'
-    path_id_col = traitlets.Unicode("").tag(sync=True)
+    max_steps    = traitlets.Int(10).tag(sync=True)
+    diff         = traitlets.Unicode("").tag(sync=True)   # "" | '["col","v1","v2"]'
+    path_id_col  = traitlets.Unicode("").tag(sync=True)
+    path_pattern = traitlets.Unicode("").tag(sync=True)   # "" | "path_start->.*->event->.*->path_end"
 
     # ── catalogues ────────────────────────────────────────────────────────────
     path_cols      = traitlets.Unicode("[]").tag(sync=True)
@@ -65,6 +66,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
         max_steps=_UNSET,
         diff=_UNSET,
         path_id_col=_UNSET,
+        path_pattern=_UNSET,
         height=_UNSET,
         sidebar_open=_UNSET,
         **kwargs,
@@ -89,18 +91,19 @@ class StepSankeyWidget(anywidget.AnyWidget):
         p = saved.get("params", {})
         d = saved.get("display", {})
 
-        self.max_steps   = max_steps   if max_steps   is not _UNSET else p.get("max_steps",   10)
-        _diff_val        = diff        if diff        is not _UNSET else _parse_diff(p.get("diff", ""))
-        self.diff        = json.dumps(list(_diff_val)) if _diff_val else ""
-        self.path_id_col = path_id_col if path_id_col is not _UNSET else (p.get("path_id_col") or "")
-        self.height      = height      if height      is not _UNSET else d.get("height",      500)
-        self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else d.get("sidebar_open", True)
+        self.max_steps    = max_steps    if max_steps    is not _UNSET else p.get("max_steps",    10)
+        _diff_val         = diff         if diff         is not _UNSET else _parse_diff(p.get("diff", ""))
+        self.diff         = json.dumps(list(_diff_val)) if _diff_val else ""
+        self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else (p.get("path_id_col") or "")
+        self.path_pattern = path_pattern if path_pattern is not _UNSET else (p.get("path_pattern") or "")
+        self.height       = height       if height       is not _UNSET else d.get("height",       500)
+        self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else d.get("sidebar_open",  True)
         self.node_positions = json.dumps(saved.get("node_positions", {}))
 
         self._recompute()
 
         self._initialized = True
-        self.observe(self._on_params_change, names=["max_steps", "diff", "path_id_col"])
+        self.observe(self._on_params_change, names=["max_steps", "diff", "path_id_col", "path_pattern"])
         self.observe(self._on_positions_change, names=["node_positions"])
         self.observe(self._on_compute_request, names=["compute_request"])
 
@@ -144,6 +147,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 max_steps=params.get("max_steps", self.max_steps),
                 path_id_col=params.get("path_id_col") or self.path_id_col or None,
                 diff=_parse_diff(params.get("diff")),
+                path_pattern=params.get("path_pattern") or self.path_pattern or None,
             )
         raise ValueError(f"Unknown tool: {tool!r}")
 
@@ -157,6 +161,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 max_steps=self.max_steps,
                 path_id_col=self.path_id_col or None,
                 diff=_parse_diff(self.diff),
+                path_pattern=self.path_pattern or None,
             )
             self.result = json.dumps(result)
         except Exception as exc:
@@ -165,11 +170,12 @@ class StepSankeyWidget(anywidget.AnyWidget):
         finally:
             self.is_loading = False
 
-    def _compute_raw(self, max_steps: int, path_id_col=None, diff=None) -> dict:
+    def _compute_raw(self, max_steps: int, path_id_col=None, diff=None, path_pattern=None) -> dict:
         raw = self._eventstream.step_matrix(
             max_steps=max_steps,
             diff=diff,
             path_id_col=path_id_col,
+            path_pattern=path_pattern,
         )
 
         if diff is not None:
@@ -199,9 +205,10 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 "version": _STATE_VERSION,
                 "saved_at": datetime.now(timezone.utc).isoformat(),
                 "params": {
-                    "max_steps":   self.max_steps,
-                    "diff":        self.diff,
-                    "path_id_col": self.path_id_col,
+                    "max_steps":    self.max_steps,
+                    "diff":         self.diff,
+                    "path_id_col":  self.path_id_col,
+                    "path_pattern": self.path_pattern,
                 },
                 "display": {
                     "height":       self.height,
