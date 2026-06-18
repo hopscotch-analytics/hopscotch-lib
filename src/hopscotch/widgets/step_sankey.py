@@ -109,6 +109,11 @@ class StepSankeyWidget(anywidget.AnyWidget):
         self._initialized = True
         self.observe(self._on_params_change, names=["max_steps", "diff", "path_id_col", "path_pattern"])
         self.observe(self._on_positions_change, names=["node_positions"])
+
+        # Always persist the initial state so that loading by object_name
+        # later reflects the params the widget was created with.
+        if self._save_path:
+            self._save_state()
         self.observe(self._on_compute_request, names=["compute_request"])
 
     # ── observers ─────────────────────────────────────────────────────────────
