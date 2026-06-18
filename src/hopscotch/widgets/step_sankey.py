@@ -196,7 +196,25 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 m["group1"] = None
                 m["group2"] = None
 
-        return {"matrices": matrices}
+        try:
+            path_col = path_id_col or self._eventstream.schema.path_col
+            event_col = self._eventstream.schema.event_col
+            df = self._eventstream._df
+            import duckdb
+            counts = (
+                duckdb.sql(
+                    f"SELECT {event_col}, COUNT(DISTINCT {path_col}) AS cnt "
+                    f"FROM df GROUP BY {event_col}"
+                )
+                .df()
+                .set_index(event_col)["cnt"]
+                .to_dict()
+            )
+            event_counts = {str(k): int(v) for k, v in counts.items()}
+        except Exception:
+            event_counts = {}
+
+        return {"matrices": matrices, "event_counts": event_counts}
 
     # ── persistence ───────────────────────────────────────────────────────────
 
