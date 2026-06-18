@@ -35,7 +35,9 @@ class TransitionGraphWidget(anywidget.AnyWidget):
 
     # ── read-only catalogues ──────────────────────────────────────────────────
     path_cols      = traitlets.Unicode("[]").tag(sync=True)
-    event_counts   = traitlets.Unicode("{}").tag(sync=True)   # {event: count}
+    event_counts    = traitlets.Unicode("{}").tag(sync=True)   # {event: count} full stream
+    event_counts_g1 = traitlets.Unicode("{}").tag(sync=True)   # group1 counts (diff mode)
+    event_counts_g2 = traitlets.Unicode("{}").tag(sync=True)   # group2 counts (diff mode)
     segment_levels = traitlets.Unicode("{}").tag(sync=True)
 
     # ── computed result ───────────────────────────────────────────────────────
@@ -207,12 +209,26 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self.is_loading = True
         self.error = ""
         try:
+            diff_list = _parse_diff(self.diff)
             result = self._compute_tm_raw(
                 values=self.values,
                 path_id_col=self.path_id_col or None,
-                diff=_parse_diff(self.diff),
+                diff=diff_list,
             )
             self.result = json.dumps(result)
+
+            # Per-group event counts for diff mode
+            if diff_list:
+                try:
+                    s1, s2 = self._eventstream.split_two(diff_list, path_id_col=self.path_id_col or None)
+                    self.event_counts_g1 = json.dumps(s1.get_event_counts())
+                    self.event_counts_g2 = json.dumps(s2.get_event_counts())
+                except Exception:
+                    self.event_counts_g1 = "{}"
+                    self.event_counts_g2 = "{}"
+            else:
+                self.event_counts_g1 = "{}"
+                self.event_counts_g2 = "{}"
         except Exception as exc:
             self.error = str(exc)
             self.result = "{}"
