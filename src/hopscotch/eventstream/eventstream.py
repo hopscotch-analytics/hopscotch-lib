@@ -1,6 +1,8 @@
-from dataclasses import dataclass, field
+import json
+from dataclasses import asdict, dataclass, field
 from functools import cached_property
 
+import duckdb
 import pandas as pd
 
 from hopscotch.eventstream.event_type import EventTypes
@@ -99,13 +101,23 @@ class Eventstream:
         }
 
     def filter_events(self, values: dict | None = None) -> "Eventstream":
-        from dataclasses import asdict
         df = self._df.copy()
         if values:
             col = values.get("column")
             vals = values.get("values", [])
+            exclude = values.get("exclude", False)
             if col and vals:
-                df = df[df[col].isin(vals)].reset_index(drop=True)
+                vals_str = json.dumps(list(vals)).replace('"', "'")[1:-1]
+                operator = "not in" if exclude else "in"
+                query = f"""
+                    select * from df
+                    where {col} {operator} ({vals_str})
+                    order by {self.schema.path_col}, {self.schema.index}, {self.schema.subindex}
+                """
+                df = duckdb.sql(query).df()
+                for c in self.schema.event_cols + self.schema.segment_cols:
+                    if c in df.columns:
+                        df[c] = df[c].astype("category")
         return Eventstream(df, asdict(self.schema), prepare=False)
 
     def split_two(self, split, path_id_col: str | None = None):
@@ -130,7 +142,6 @@ class Eventstream:
         return s1, s2
 
     def add_start_end_events(self, path_id_col: str | None = None) -> "Eventstream":
-        from dataclasses import asdict
         from hopscotch.data_processors.add_start_end_events import AddStartEndEvents
         dp = AddStartEndEvents(path_id_col)
         new_df, new_schema = dp.apply(self._df, self.schema)
