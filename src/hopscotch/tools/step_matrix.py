@@ -139,11 +139,11 @@ class StepMatrix:
                     return i + 1
             return None
         else:
-            pattern_parts = pattern.split("->.*->")
-            if len(pattern_parts) == 1 and pattern.startswith(".*->"):
-                pattern_parts = ["", pattern_parts[0]]
-            elif len(pattern_parts) == 1 and pattern.endswith("->.*"):
-                pattern_parts = [pattern_parts[0], ""]
+            # Split by every occurrence of ".*" wildcard (including leading/trailing).
+            # e.g. ".*->path_end"           → ["", "path_end"]
+            #      "path_start->.*"          → ["path_start", ""]
+            #      ".*->basket->.*->path_end" → ["", "basket", "path_end"]
+            pattern_parts = re.split(r"(?:^|->)\.\*(?:->|$)", pattern)
 
             def find_non_greedy_match(seq, parts):
                 idx = 0
@@ -214,6 +214,7 @@ class StepMatrix:
         except _Empty:
             raise PatternNoMatchError(path_pattern)
 
+        original_pattern = path_pattern
         pattern_tokens = path_pattern.split("->")
         skip_first_matrix = pattern_tokens[0] != path_start
         if skip_first_matrix:
@@ -300,15 +301,16 @@ class StepMatrix:
 
         else:
             stream1, stream2 = self.eventstream.split_two(diff, path_id_col=path_id_col)
-            kwargs = dict(max_steps=max_steps, path_pattern=path_pattern, path_id_col=path_id_col)
+            # Use original_pattern so skip_first_matrix logic applies correctly in each sub-call
+            kwargs = dict(max_steps=max_steps, path_pattern=original_pattern, path_id_col=path_id_col)
             try:
                 sms1 = stream1.step_matrix(**kwargs)
             except PatternNoMatchError:
-                raise PatternNoMatchError(path_pattern, group="the first diff group")
+                raise PatternNoMatchError(original_pattern, group="the first diff group")
             try:
                 sms2 = stream2.step_matrix(**kwargs)
             except PatternNoMatchError:
-                raise PatternNoMatchError(path_pattern, group="the second diff group")
+                raise PatternNoMatchError(original_pattern, group="the second diff group")
 
             new_sms1, new_sms2 = self._align_matrices(list(sms1), list(sms2))
             sms = [new_sms2[i] - new_sms1[i] for i in range(len(new_sms1))]
