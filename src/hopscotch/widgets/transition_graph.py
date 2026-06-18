@@ -35,6 +35,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
 
     # ── read-only catalogues ──────────────────────────────────────────────────
     path_cols      = traitlets.Unicode("[]").tag(sync=True)
+    event_counts   = traitlets.Unicode("{}").tag(sync=True)   # {event: count}
     segment_levels = traitlets.Unicode("{}").tag(sync=True)
 
     # ── computed result ───────────────────────────────────────────────────────
@@ -86,6 +87,10 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         except Exception:
             self.segment_levels = "{}"
         self.path_cols = json.dumps(eventstream.schema.path_cols)
+        try:
+            self.event_counts = json.dumps(eventstream.get_event_counts())
+        except Exception:
+            self.event_counts = "{}"
 
         saved = self._load_state() if self._load_path else {}
 

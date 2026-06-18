@@ -85,6 +85,13 @@ class Eventstream:
     def empty(self, exclude_start_end: bool = True) -> bool:
         return self.to_dataframe(exclude_start_end=exclude_start_end).empty
 
+    def get_event_counts(self, event_col: str | None = None) -> dict[str, int]:
+        import duckdb
+        event_col = event_col or self.schema.event_col
+        df = self._df
+        query = f"SELECT {event_col}, COUNT(*) AS cnt FROM df GROUP BY {event_col}"
+        return duckdb.sql(query).df().set_index(event_col)["cnt"].to_dict()
+
     def get_all_segment_levels(self) -> dict[str, list[str]]:
         return {
             col: self._df[col].cat.categories.tolist()
