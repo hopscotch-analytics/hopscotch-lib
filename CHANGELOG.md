@@ -7,6 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [0.2.0] - 2026-06-19
 
+
 ### Added — Transition Graph
 - **Diff mode node coloring**: nodes tinted red/blue based on event share
   difference between groups; inner circle radius shrinks proportionally
