@@ -119,6 +119,16 @@ class Eventstream:
         new_df, new_schema = FilterEvents(values=values, func=func, sql=sql).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
+    def add_clusters(self, segment_name: str, features: list, method: str = "kmeans", scaler=None, n_clusters=None, min_cluster_size=None, cluster_selection_epsilon=None, nmf_k=None, path_id_col=None, event_col=None) -> "Eventstream":
+        from hopscotch.data_processors.add_clusters import AddClusters
+        new_df, new_schema = AddClusters(eventstream=self, segment_name=segment_name, metrics=features, method=method, scaler=scaler, n_clusters=n_clusters, min_cluster_size=min_cluster_size, cluster_selection_epsilon=cluster_selection_epsilon, nmf_k=nmf_k, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def url_events(self, column: str, nodes: list, strip_host: bool = True, strip_cgi: bool = True, strip_locale: bool = True, slug_enabled: bool = True, host_col=None, cgi_col=None, locale_col=None, slug_col=None) -> "Eventstream":
+        from hopscotch.data_processors.url_events import UrlEvents
+        new_df, new_schema = UrlEvents(column=column, nodes=nodes, strip_host=strip_host, strip_cgi=strip_cgi, strip_locale=strip_locale, slug_enabled=slug_enabled, host_col=host_col, cgi_col=cgi_col, locale_col=locale_col, slug_col=slug_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
     def filter_paths(self, ast_condition: dict, path_id_col: str | None = None, event_col: str | None = None) -> "Eventstream":
         """
         Filter paths based on an AST condition.

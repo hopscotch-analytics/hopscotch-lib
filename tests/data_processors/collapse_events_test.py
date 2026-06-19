@@ -231,6 +231,40 @@ class TestCollapseEventsValidation:
         with pytest.raises(PreprocessingConfigError):
             stream.collapse_events(session_id_col="session_id", session_type_col="nonexistent")
 
+    def test_raises_empty_event_groups(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[])
+
+    def test_raises_no_boundary_mode(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[{"default": "session"}])
+
+    def test_raises_multiple_boundary_modes(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[{
+                "events": ["A"],
+                "separator": "sep",
+                "default": "session",
+            }])
+
+    def test_raises_start_without_end(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[{"start_event": "start", "default": "session"}])
+
+    def test_raises_end_without_start(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[{"end_event": "end", "default": "session"}])
+
+    def test_raises_no_default_and_no_cases(self):
+        stream = make_stream([["user_1", "A", "2020-01-01"]])
+        with pytest.raises(PreprocessingConfigError):
+            stream.collapse_events(event_groups=[{"events": ["A"]}])
+
 
 # ---------------------------------------------------------------------------
 # Session type mode
@@ -334,3 +368,330 @@ class TestCollapseEventsBySessionType:
         res = stream.collapse_events(session_id_col="session_id", session_type_col="session_type")
         df_res = res.df
         assert int(df_res["score"].iloc[0]) == 10
+
+
+# ---------------------------------------------------------------------------
+# Event groups — events mode
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsGroupsEvents:
+
+    def test_basic_events_collapse(self):
+        """Events in the session group are collapsed into a single row with the default name."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "A", "2020-01-01 00:01:00"],
+            ["user_1", "B", "2020-01-01 00:02:00"],
+            ["user_1", "C", "2020-01-01 00:03:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "default": "session"}])
+
+        assert events(res) == ["session", "C"]
+
+    def test_events_mode_collapsed_event_type(self):
+        """Collapsed rows get the collapsed event_type."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "B", "2020-01-01 00:01:00"],
+            ["user_1", "C", "2020-01-01 00:02:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "default": "session"}])
+        df = res.df
+
+        collapsed_rows = df[df["event"] == "session"]
+        assert all(collapsed_rows[res.schema.event_type] == COLLAPSED)
+
+    def test_events_mode_uncollapsed_rows_preserved(self):
+        """Rows outside the session group are kept as-is."""
+        stream = make_stream([
+            ["user_1", "X", "2020-01-01 00:00:00"],
+            ["user_1", "A", "2020-01-01 00:01:00"],
+            ["user_1", "Y", "2020-01-01 00:02:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A"], "default": "session"}])
+
+        assert "X" in events(res)
+        assert "Y" in events(res)
+
+    def test_events_mode_multiple_sessions(self):
+        """Two disjoint session groups in the same path each produce one collapsed row."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "A", "2020-01-01 00:01:00"],
+            ["user_1", "C", "2020-01-01 00:02:00"],
+            ["user_1", "A", "2020-01-01 00:03:00"],
+            ["user_1", "A", "2020-01-01 00:04:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A"], "default": "session"}])
+        df = res.df
+
+        assert list(df["event"].astype(str)).count("session") == 2
+        assert "C" in list(df["event"].astype(str))
+
+    def test_events_mode_earliest_timestamp_kept(self):
+        """The collapsed row uses the earliest timestamp in the session."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:05:00"],
+            ["user_1", "A", "2020-01-01 00:10:00"],
+            ["user_1", "B", "2020-01-01 00:15:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "default": "session"}])
+        df = res.df
+
+        ts = pd.to_datetime(df.loc[df["event"] == "session", "timestamp"].iloc[0])
+        assert ts == pd.Timestamp("2020-01-01 00:05:00")
+
+    def test_events_mode_multiple_users(self):
+        """Each user's sessions are counted independently."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "B", "2020-01-01 00:01:00"],
+            ["user_2", "A", "2020-01-01 00:00:00"],
+            ["user_2", "C", "2020-01-01 00:01:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "default": "session"}])
+        df = res.df
+
+        u1_events = list(df[df["user_id"] == "user_1"]["event"].astype(str))
+        u2_events = list(df[df["user_id"] == "user_2"]["event"].astype(str))
+        assert "session" in u1_events
+        assert "C" in u2_events
+
+
+# ---------------------------------------------------------------------------
+# Event groups — cases (conditional naming)
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsGroupsCases:
+
+    def test_cases_has_metric(self):
+        """Cases with 'has' metric assign correct name when event is present."""
+        stream = make_stream([
+            ["user_1", "A",        "2020-01-01 00:00:00"],
+            ["user_1", "purchase", "2020-01-01 00:01:00"],
+            ["user_1", "B",        "2020-01-01 00:02:00"],
+            ["user_1", "sep",      "2020-01-01 00:03:00"],
+            ["user_1", "C",        "2020-01-01 00:04:00"],
+            ["user_1", "D",        "2020-01-01 00:05:00"],
+            ["user_1", "sep",      "2020-01-01 00:06:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{
+            "separator": "sep",
+            "cases": [
+                {
+                    "condition": {"op": ">", "metric": "has", "value": 0, "metric_args": {"events": "purchase"}},
+                    "new_name": "purchase_session",
+                }
+            ],
+            "default": "no_purchase_session",
+        }])
+
+        result_events = events(res)
+        assert "purchase_session" in result_events
+        assert "no_purchase_session" in result_events
+
+    def test_cases_default_when_no_match(self):
+        """When no case condition matches, the default name is used."""
+        stream = make_stream([
+            ["user_1", "A",   "2020-01-01 00:00:00"],
+            ["user_1", "B",   "2020-01-01 00:01:00"],
+            ["user_1", "sep", "2020-01-01 00:02:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{
+            "separator": "sep",
+            "cases": [
+                {
+                    "condition": {"op": ">", "metric": "has", "value": 0, "metric_args": {"events": "purchase"}},
+                    "new_name": "purchase_session",
+                }
+            ],
+            "default": "other_session",
+        }])
+
+        assert "other_session" in events(res)
+        assert "purchase_session" not in events(res)
+
+
+# ---------------------------------------------------------------------------
+# Event groups — separator mode
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsGroupsSeparator:
+
+    def test_separator_basic(self):
+        """Events up to (and including) the separator are collapsed."""
+        stream = make_stream([
+            ["user_1", "A",   "2020-01-01 00:00:00"],
+            ["user_1", "B",   "2020-01-01 00:01:00"],
+            ["user_1", "sep", "2020-01-01 00:02:00"],
+            ["user_1", "C",   "2020-01-01 00:03:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"separator": "sep", "default": "session"}])
+        df = res.df
+
+        assert "session" in list(df["event"].astype(str))
+        assert "C" in list(df["event"].astype(str))
+
+    def test_separator_multiple_sessions(self):
+        """Multiple separator-delimited groups each collapse into one row."""
+        stream = make_stream([
+            ["user_1", "A",   "2020-01-01 00:00:00"],
+            ["user_1", "sep", "2020-01-01 00:01:00"],
+            ["user_1", "B",   "2020-01-01 00:02:00"],
+            ["user_1", "sep", "2020-01-01 00:03:00"],
+            ["user_1", "C",   "2020-01-01 00:04:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"separator": "sep", "default": "session"}])
+
+        assert events(res).count("session") == 2
+        assert "C" in events(res)
+
+
+# ---------------------------------------------------------------------------
+# Event groups — start / end mode
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsGroupsStartEnd:
+
+    def test_start_end_basic(self):
+        """Events between start and end (inclusive) are collapsed into one row."""
+        stream = make_stream([
+            ["user_1", "start",   "2020-01-01 00:00:00"],
+            ["user_1", "A",       "2020-01-01 00:01:00"],
+            ["user_1", "B",       "2020-01-01 00:02:00"],
+            ["user_1", "end",     "2020-01-01 00:03:00"],
+            ["user_1", "C",       "2020-01-01 00:04:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"start_event": "start", "end_event": "end", "default": "session"}])
+        df = res.df
+
+        assert "session" in list(df["event"].astype(str))
+        assert "C" in list(df["event"].astype(str))
+
+    def test_start_end_multiple_sessions(self):
+        """Two start/end pairs produce two collapsed rows."""
+        stream = make_stream([
+            ["user_1", "start",   "2020-01-01 00:00:00"],
+            ["user_1", "A",       "2020-01-01 00:01:00"],
+            ["user_1", "end",     "2020-01-01 00:02:00"],
+            ["user_1", "start",   "2020-01-01 00:03:00"],
+            ["user_1", "B",       "2020-01-01 00:04:00"],
+            ["user_1", "end",     "2020-01-01 00:05:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"start_event": "start", "end_event": "end", "default": "session"}])
+
+        assert events(res).count("session") == 2
+
+
+# ---------------------------------------------------------------------------
+# Event groups — timeout mode
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsGroupsTimeout:
+
+    def test_timeout_splits_events_session(self):
+        """A timeout add-on to events mode splits a session when the gap exceeds the timeout."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "B", "2020-01-01 00:01:00"],  # within 60s
+            ["user_1", "A", "2020-01-01 01:00:00"],  # > 60s gap — new session
+            ["user_1", "B", "2020-01-01 01:01:00"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "timeout": 60, "default": "session"}])
+
+        assert events(res).count("session") == 2
+
+    def test_timeout_no_split_when_within_window(self):
+        """No timeout split when all events are within the window."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "B", "2020-01-01 00:00:30"],
+            ["user_1", "A", "2020-01-01 00:00:59"],
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A", "B"], "timeout": 60, "default": "session"}])
+
+        assert events(res) == ["session"]
+
+    def test_timeout_multiple_users(self):
+        """Timeout is applied independently per user."""
+        stream = make_stream([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "A", "2020-01-01 01:00:00"],  # gap > 60s — second session
+            ["user_2", "A", "2020-01-01 00:00:00"],
+            ["user_2", "A", "2020-01-01 00:00:30"],  # gap < 60s — same session
+        ])
+        res = stream.collapse_events(event_groups=[{"events": ["A"], "timeout": 60, "default": "session"}])
+        df = res.df
+
+        u1_sessions = list(df[df["user_id"] == "user_1"]["event"].astype(str))
+        u2_sessions = list(df[df["user_id"] == "user_2"]["event"].astype(str))
+        assert u1_sessions.count("session") == 2
+        assert u2_sessions.count("session") == 1
+
+
+# ---------------------------------------------------------------------------
+# Event groups — multiple groups applied sequentially
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsMultipleGroups:
+
+    def test_two_groups_applied_sequentially(self):
+        """Two groups are applied one after the other."""
+        stream = make_stream([
+            ["user_1", "A",   "2020-01-01 00:00:00"],
+            ["user_1", "A",   "2020-01-01 00:01:00"],
+            ["user_1", "B",   "2020-01-01 00:02:00"],
+            ["user_1", "B",   "2020-01-01 00:03:00"],
+        ])
+        res = stream.collapse_events(event_groups=[
+            {"events": ["A"], "default": "session_a"},
+            {"events": ["B"], "default": "session_b"},
+        ])
+
+        result_events = events(res)
+        assert "session_a" in result_events
+        assert "session_b" in result_events
+        assert "A" not in result_events
+        assert "B" not in result_events
+
+
+# ---------------------------------------------------------------------------
+# Agg parameter (event_groups variant)
+# ---------------------------------------------------------------------------
+
+class TestCollapseEventsAgg:
+
+    def test_agg_last_for_custom_col(self):
+        """The 'last' aggregation picks the value from the latest event in the session."""
+        df = pd.DataFrame([
+            ["user_1", "A", "2020-01-01 00:00:00", 10],
+            ["user_1", "A", "2020-01-01 00:01:00", 20],
+            ["user_1", "C", "2020-01-01 00:02:00", 30],
+        ], columns=["user_id", "event", "timestamp", "score"])
+        schema = {**SCHEMA, "custom_cols": ["score"]}
+        stream = Eventstream(df, schema)
+
+        res = stream.collapse_events(
+            event_groups=[{"events": ["A"], "default": "session"}],
+            agg={"score": "last"},
+        )
+        df_res = res.df
+        session_row = df_res[df_res["event"] == "session"]
+        assert int(session_row["score"].iloc[0]) == 20
+
+    def test_agg_first_is_default(self):
+        """Without explicit agg, 'first' is used (earliest timestamp value)."""
+        df = pd.DataFrame([
+            ["user_1", "A",   "2020-01-01 00:00:00", 10],
+            ["user_1", "B",   "2020-01-01 00:01:00", 20],
+            ["user_1", "sep", "2020-01-01 00:02:00", 30],
+        ], columns=["user_id", "event", "timestamp", "score"])
+        schema = {**SCHEMA, "custom_cols": ["score"]}
+        stream = Eventstream(df, schema)
+
+        res = stream.collapse_events(
+            event_groups=[{"separator": "sep", "default": "session"}],
+        )
+        df_res = res.df
+        session_row = df_res[df_res["event"] == "session"]
+        assert int(session_row["score"].iloc[0]) == 10

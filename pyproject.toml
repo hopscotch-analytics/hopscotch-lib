@@ -13,6 +13,8 @@ dependencies = [
     "anywidget>=0.9",
     "traitlets>=5.0",
     "pyarrow>=14.0",
+    "scikit-learn>=1.3",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]

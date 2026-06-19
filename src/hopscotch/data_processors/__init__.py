@@ -1,3 +1,4 @@
+from hopscotch.data_processors.add_clusters import AddClusters
 from hopscotch.data_processors.add_events import AddEvents
 from hopscotch.data_processors.add_segment import AddSegment
 from hopscotch.data_processors.add_start_end_events import AddStartEndEvents
@@ -10,9 +11,10 @@ from hopscotch.data_processors.rename_events import RenameEvents
 from hopscotch.data_processors.sample_paths import SamplePaths
 from hopscotch.data_processors.split_sessions import SplitSessions
 from hopscotch.data_processors.truncate_paths import TruncatePaths
+from hopscotch.data_processors.url_events import UrlEvents
 
 __all__ = [
-    "AddEvents", "AddSegment", "AddStartEndEvents", "CollapseEvents", "DropSegment",
+    "AddClusters", "AddEvents", "AddSegment", "AddStartEndEvents", "CollapseEvents", "DropSegment",
     "EditEvents", "FilterEvents", "FilterPaths", "RenameEvents", "SamplePaths",
-    "SplitSessions", "TruncatePaths",
+    "SplitSessions", "TruncatePaths", "UrlEvents",
 ]
