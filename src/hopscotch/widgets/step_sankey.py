@@ -10,17 +10,7 @@ _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _STATE_VERSION = 1
 _UNSET = object()
 
-_CDN_URL = "https://github.com/hopscotch-analytics/hopscotch-lib/releases/download/v{version}/widget.js"
-
-def _get_esm() -> "str | pathlib.Path":
-    local = _STATIC / "widget.js"
-    if local.exists():
-        return local
-    try:
-        from importlib.metadata import version
-        return _CDN_URL.format(version=version("hopscotch"))
-    except Exception:
-        return _CDN_URL.format(version="latest")
+from hopscotch.widgets._esm import _get_esm  # noqa: E402
 
 
 class StepSankeyWidget(anywidget.AnyWidget):
