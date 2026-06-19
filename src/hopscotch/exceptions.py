@@ -45,3 +45,8 @@ class PatternNoMatchError(HopscotchError):
         if group:
             msg += f" in {group}"
         super().__init__(msg, "PATTERN_NO_MATCH")
+
+
+class InvalidMetricConfigError(HopscotchError):
+    def __init__(self, message: str):
+        super().__init__(message, "INVALID_METRIC_CONFIG")

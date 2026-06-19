@@ -119,6 +119,63 @@ class Eventstream:
         new_df, new_schema = FilterEvents(values=values, func=func, sql=sql).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
+    def filter_paths(self, ast_condition: dict, path_id_col: str | None = None, event_col: str | None = None) -> "Eventstream":
+        """
+        Filter paths based on an AST condition.
+
+        The ast_condition can include various metrics like:
+        - event_count: count of specific events
+        - has: presence of specific event(s)
+        - matches: whether path matches a pattern
+        - length, duration, time_between, active_days, etc.
+
+        Example:
+            ast_condition = {
+                "op": "and",
+                "args": [
+                    {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}},
+                    {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "registration->.*->purchase"}},
+                ]
+            }
+        """
+        from hopscotch.data_processors.filter_paths import FilterPaths
+        from hopscotch.exceptions import EmptyEventstreamError
+
+        dp = FilterPaths(ast_condition, path_id_col, event_col)
+        path_id_col = path_id_col or self.schema.path_col
+
+        # Extract metric configs
+        metric_configs = dp._get_metric_configs(ast_condition)
+
+        # Build metrics
+        metrics = self.get_metrics(metric_configs, path_id_col=path_id_col).reset_index()
+        condition = dp._get_where_condition(ast_condition)
+        query = f"SELECT {path_id_col} FROM metrics WHERE {condition}"
+        path_ids = duckdb.sql(query).df()[path_id_col].tolist()
+
+        if len(path_ids) == 0:
+            raise EmptyEventstreamError("no paths match the filter_paths condition")
+
+        result_stream = self.filter_events(values={"column": path_id_col, "values": path_ids})
+        if result_stream.empty():
+            raise EmptyEventstreamError("no events remain after filter_paths")
+        return result_stream
+
+    def get_metrics(self, metrics: list, path_id_col: str | None = None) -> pd.DataFrame:
+        """
+        Build metrics for each path in the eventstream.
+
+        Args:
+            metrics: List of metric configuration dicts with 'metric' and optional 'metric_args' fields
+            path_id_col: Path ID column (if None, taken from schema)
+
+        Returns:
+            DataFrame with path_id as index and metrics as columns
+        """
+        from hopscotch.metrics.metric_builder import MetricBuilder
+        builder = MetricBuilder(self)
+        return builder.build_metrics(metrics, path_id_col)
+
     def add_events(self, new_event_name: str, source_events=None, sql=None, churn=None) -> "Eventstream":
         from hopscotch.data_processors.add_events import AddEvents
         new_df, new_schema = AddEvents(new_event_name, source_events=source_events, sql=sql, churn=churn).apply(self._df, self.schema)
