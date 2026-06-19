@@ -3,12 +3,13 @@ from typing import Tuple
 
 import pandas as pd
 
+from hopscotch.data_processors.data_processor import DataProcessor
 from hopscotch.eventstream.event_type import EventTypes
 from hopscotch.eventstream.schema import EventstreamSchema
 
 
 @dataclass
-class AddStartEndEvents:
+class AddStartEndEvents(DataProcessor):
     path_id_col: str | None = field(default=None)
 
     def apply(
