@@ -14,12 +14,7 @@ if TYPE_CHECKING:
     from hopscotch.eventstream.eventstream import Eventstream
 
 
-class PatternNoMatchError(Exception):
-    def __init__(self, pattern: str, group: str | None = None):
-        msg = f"Pattern '{pattern}' doesn't match any paths"
-        if group:
-            msg += f" in {group}"
-        super().__init__(msg)
+from hopscotch.exceptions import PatternNoMatchError  # noqa: F401 — re-exported for backwards compat
 
 
 @dataclass

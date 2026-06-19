@@ -87,6 +87,18 @@ class Eventstream:
     def empty(self, exclude_start_end: bool = True) -> bool:
         return self.to_dataframe(exclude_start_end=exclude_start_end).empty
 
+    def equals(self, other: "Eventstream", exclude_start_end: bool = False, ignore_technical_columns: bool = True) -> bool:
+        df1 = self.to_dataframe(exclude_start_end=exclude_start_end).reset_index(drop=True)
+        df2 = other.to_dataframe(exclude_start_end=exclude_start_end).reset_index(drop=True)
+        if ignore_technical_columns:
+            drop = [self.schema.event_type, self.schema.index, self.schema.subindex]
+            df1 = df1.drop(columns=[c for c in drop if c in df1.columns])
+            df2 = df2.drop(columns=[c for c in drop if c in df2.columns])
+        if set(df1.columns) != set(df2.columns):
+            return False
+        df2 = df2[df1.columns]
+        return pd.DataFrame.equals(df1, df2)
+
     def get_event_counts(self, event_col: str | None = None) -> dict[str, int]:
         import duckdb
         event_col = event_col or self.schema.event_col
@@ -100,25 +112,57 @@ class Eventstream:
             for col in self.schema.segment_cols
         }
 
-    def filter_events(self, values: dict | None = None) -> "Eventstream":
-        df = self._df.copy()
-        if values:
-            col = values.get("column")
-            vals = values.get("values", [])
-            exclude = values.get("exclude", False)
-            if col and vals:
-                vals_str = json.dumps(list(vals)).replace('"', "'")[1:-1]
-                operator = "not in" if exclude else "in"
-                query = f"""
-                    select * from df
-                    where {col} {operator} ({vals_str})
-                    order by {self.schema.path_col}, {self.schema.index}, {self.schema.subindex}
-                """
-                df = duckdb.sql(query).df()
-                for c in self.schema.event_cols + self.schema.segment_cols:
-                    if c in df.columns:
-                        df[c] = df[c].astype("category")
-        return Eventstream(df, asdict(self.schema), prepare=False)
+    def filter_events(self, values: dict | None = None, func=None, sql: str | None = None) -> "Eventstream":
+        from hopscotch.data_processors.filter_events import FilterEvents
+        if values is None and func is None and sql is None:
+            return Eventstream(self._df.copy(), asdict(self.schema), prepare=False)
+        new_df, new_schema = FilterEvents(values=values, func=func, sql=sql).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def add_events(self, new_event_name: str, source_events=None, sql=None, churn=None) -> "Eventstream":
+        from hopscotch.data_processors.add_events import AddEvents
+        new_df, new_schema = AddEvents(new_event_name, source_events=source_events, sql=sql, churn=churn).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def add_segment(self, name: str, values=None, func=None, sql=None) -> "Eventstream":
+        from hopscotch.data_processors.add_segment import AddSegment
+        new_df, new_schema = AddSegment(name, values=values, func=func, sql=sql).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, daily_states=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
+        from hopscotch.data_processors.collapse_events import CollapseEvents
+        new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, daily_states=daily_states, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        return Eventstream(new_df, new_schema.__dict__, prepare=False)
+
+    def drop_segment(self, name: str) -> "Eventstream":
+        from hopscotch.data_processors.drop_segment import DropSegment
+        new_df, new_schema = DropSegment(name).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def edit_events(self, rename=None, delete=None) -> "Eventstream":
+        from hopscotch.data_processors.edit_events import EditEvents
+        new_df, new_schema = EditEvents(rename=rename, delete=delete).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def rename_events(self, mapping: dict) -> "Eventstream":
+        from hopscotch.data_processors.rename_events import RenameEvents
+        new_df, new_schema = RenameEvents(mapping).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def sample_paths(self, sample_size, random_state=None, path_id_col=None) -> "Eventstream":
+        from hopscotch.data_processors.sample_paths import SamplePaths
+        new_df, new_schema = SamplePaths(sample_size=sample_size, random_state=random_state, path_id_col=path_id_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def split_sessions(self, session_col="session_id", session_index_col="session_index", separator=None, start_event=None, end_event=None, timeout=None, path_id_col=None, event_col=None) -> "Eventstream":
+        from hopscotch.data_processors.split_sessions import SplitSessions
+        new_df, new_schema = SplitSessions(session_col=session_col, session_index_col=session_index_col, separator=separator, start_event=start_event, end_event=end_event, timeout=timeout, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    def truncate_paths(self, left: str, right: str, path_id_col=None, event_col=None) -> "Eventstream":
+        from hopscotch.data_processors.truncate_paths import TruncatePaths
+        new_df, new_schema = TruncatePaths(left=left, right=right, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def split_two(self, split, path_id_col: str | None = None):
         from hopscotch.exceptions import EmptyEventstreamError, DiffConfigError
@@ -127,7 +171,12 @@ class Eventstream:
             if segment_col not in self.schema.segment_cols:
                 raise DiffConfigError(f"'{segment_col}' is not a segment column")
             s1 = self.filter_events({"column": segment_col, "values": [v1]})
-            s2 = self.filter_events({"column": segment_col, "values": [v2]})
+            if v2 == "<OUTER>":
+                all_vals = set(self.get_all_segment_levels().get(segment_col, []))
+                v2_vals = list(all_vals - {v1})
+            else:
+                v2_vals = [v2]
+            s2 = self.filter_events({"column": segment_col, "values": v2_vals})
         elif len(split) == 2:
             ids1, ids2 = split[0], split[1]
             path_id_col = path_id_col or self.schema.path_col

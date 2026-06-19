@@ -24,3 +24,24 @@ class InvalidParameterError(HopscotchError):
         if allowed_values:
             message += f". Allowed values: {allowed_values}"
         super().__init__(message, "INVALID_PARAMETER")
+
+
+class PreprocessingConfigError(HopscotchError):
+    def __init__(self, processor: str, message: str):
+        super().__init__(f"[{processor}] {message}", "PREPROCESSING_CONFIG_ERROR")
+
+
+class PreprocessingColumnNotFoundError(HopscotchError):
+    def __init__(self, processor: str, column: str, available: list):
+        super().__init__(
+            f"[{processor}] Column '{column}' not found. Available: {available}",
+            "PREPROCESSING_COLUMN_NOT_FOUND"
+        )
+
+
+class PatternNoMatchError(HopscotchError):
+    def __init__(self, pattern: str, group: str | None = None):
+        msg = f"Pattern '{pattern}' doesn't match any paths"
+        if group:
+            msg += f" in {group}"
+        super().__init__(msg, "PATTERN_NO_MATCH")
