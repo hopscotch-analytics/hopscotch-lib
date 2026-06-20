@@ -147,9 +147,11 @@ class MetricConfig:
                 "original": config_dict,
             }
         elif metric == "active_days":
+            active_events = metric_args.get("active_events")
             return {
                 "type": "active_days",
                 "metric_names": ["active_days"],
+                "active_events": active_events,
                 "original": config_dict,
             }
         elif metric == "matches":
@@ -490,7 +492,7 @@ class MetricBuilder:
         elif config["type"] == "first_event_dt":
             return self._build_first_event_dt(path_id_col)
         elif config["type"] == "active_days":
-            return self._build_active_days(path_id_col)
+            return self._build_active_days(path_id_col, config.get("active_events"))
         elif config["type"] == "belongs_to":
             return self._build_belongs_to(config, path_id_col)
         else:
@@ -606,23 +608,32 @@ class MetricBuilder:
         return result.set_index(path_id_col)
 
     def _build_first_event_dt(self, path_id_col: str) -> pd.DataFrame:
-        """Timestamp of first event per path"""
+        """Unix timestamp (seconds) of first event per path.
+        Stored as float so mean/median/percentile aggregations work correctly."""
         timestamp_col = self.schema.timestamp
         query = f"""
-        SELECT {path_id_col}, MIN({timestamp_col}) AS first_event_dt
+        SELECT {path_id_col}, EPOCH(MIN({timestamp_col})) AS first_event_dt
         FROM df
         GROUP BY {path_id_col}
         """
         df = self.df
         result = duckdb.query(query).df()
-        result["first_event_dt"] = pd.to_datetime(result["first_event_dt"])
+        result["first_event_dt"] = result["first_event_dt"].astype(float)
         return result.set_index(path_id_col)
 
-    def _build_active_days(self, path_id_col: str) -> pd.DataFrame:
-        """Number of unique days with at least one event per path"""
+    def _build_active_days(self, path_id_col: str, active_events=None) -> pd.DataFrame:
+        """Number of unique days with at least one (matching) event per path.
+        active_events: optional list of events to count; if None, all events count."""
         timestamp_col = self.schema.timestamp
+        event_col = self.schema.event_col
+        if active_events:
+            ev_list = active_events if isinstance(active_events, list) else [active_events]
+            quoted = ", ".join(f"'{e}'" for e in ev_list)
+            count_expr = f"COUNT(DISTINCT CASE WHEN {event_col} IN ({quoted}) THEN CAST({timestamp_col} AS DATE) END)"
+        else:
+            count_expr = f"COUNT(DISTINCT CAST({timestamp_col} AS DATE))"
         query = f"""
-        SELECT {path_id_col}, COUNT(DISTINCT CAST({timestamp_col} AS DATE)) AS active_days
+        SELECT {path_id_col}, {count_expr} AS active_days
         FROM df
         GROUP BY {path_id_col}
         """

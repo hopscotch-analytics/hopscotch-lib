@@ -26,7 +26,8 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
     apply_trigger  = traitlets.Unicode("").tag(sync=True)    # any change → recompute
 
     # ── catalogues ────────────────────────────────────────────────────────
-    segment_cols = traitlets.Unicode("[]").tag(sync=True)
+    segment_cols   = traitlets.Unicode("[]").tag(sync=True)
+    segment_levels = traitlets.Unicode("{}").tag(sync=True)
     path_cols    = traitlets.Unicode("[]").tag(sync=True)
     event_list   = traitlets.Unicode("[]").tag(sync=True)
 
@@ -72,6 +73,10 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         except Exception:
             self.event_list = "[]"
         self.segment_cols = json.dumps(eventstream.schema.segment_cols)
+        try:
+            self.segment_levels = json.dumps(eventstream.get_all_segment_levels())
+        except Exception:
+            self.segment_levels = "{}"
         self.path_cols    = json.dumps(eventstream.schema.path_cols)
 
         saved = _load_state(self._load_path)
