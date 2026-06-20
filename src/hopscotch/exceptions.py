@@ -50,3 +50,20 @@ class PatternNoMatchError(HopscotchError):
 class InvalidMetricConfigError(HopscotchError):
     def __init__(self, message: str):
         super().__init__(message, "INVALID_METRIC_CONFIG")
+
+
+class MetricDistributionError(HopscotchError):
+    pass
+
+
+class SegmentValueNotFoundError(MetricDistributionError):
+    def __init__(self, segment_value: str, segment_col: str, available_values: list | None = None):
+        message = f"Segment value '{segment_value}' not found in column '{segment_col}'"
+        if available_values:
+            message += f". Available values: {available_values}"
+        super().__init__(message, "SEGMENT_VALUE_NOT_FOUND")
+
+
+class InvalidComplementConfigError(MetricDistributionError):
+    def __init__(self, message: str):
+        super().__init__(message, "INVALID_COMPLEMENT_CONFIG")

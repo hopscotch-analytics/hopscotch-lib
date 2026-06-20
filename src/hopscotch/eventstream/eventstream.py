@@ -369,3 +369,69 @@ class Eventstream:
         if not steps:
             return {"steps": []}
         return Funnel(self).fit(steps=steps, diff=diff, path_id_col=path_id_col)
+
+    def segment_overview(
+        self,
+        segment_col: str | None = None,
+        metrics_config: list | None = None,
+        path_id_col: str | None = None,
+        height: int | None = None,
+        object_name: str | None = None,
+        load_from: str | None = None,
+    ):
+        """Interactive Segment Overview heatmap widget for Jupyter notebooks."""
+        from hopscotch.widgets.segment_overview import SegmentOverviewWidget, _UNSET
+        return SegmentOverviewWidget(
+            eventstream=self,
+            object_name=object_name,
+            load_from=load_from,
+            segment_col=segment_col       if segment_col    is not None else _UNSET,
+            metrics_config=metrics_config if metrics_config is not None else _UNSET,
+            path_id_col=path_id_col       if path_id_col    is not None else _UNSET,
+            height=height                 if height         is not None else _UNSET,
+        )
+
+    def segment_overview_matrix(
+        self,
+        segment_col: str,
+        metrics_config: list | None = None,
+        path_id_col: str | None = None,
+        event_col: str | None = None,
+    ) -> "pd.DataFrame":
+        """Compute aggregated metrics across segment values (headless).
+
+        Returns a DataFrame with metrics as rows and segment values as columns.
+        Always includes segment_size and segment_share as first two rows.
+        """
+        from hopscotch.tools.segment_overview import SegmentOverview
+        return SegmentOverview(self).fit(
+            segment_col=segment_col,
+            metrics_config=metrics_config or [],
+            path_id_col=path_id_col,
+            event_col=event_col,
+        )
+
+    def metric_distribution(
+        self,
+        segment_col: str,
+        segment_value,
+        metric: dict,
+        complement: bool = False,
+        path_id_col: str | None = None,
+    ) -> dict:
+        """Compute histogram/KDE distribution for a metric across one or two segment values.
+
+        Parameters
+        ----------
+        segment_value:
+            Single string → compare with complement (complement=True required).
+            List of two strings → compare the two distributions.
+        """
+        from hopscotch.tools.segment_overview import SegmentOverview
+        return SegmentOverview(self).metric_distribution(
+            segment_col=segment_col,
+            segment_value=segment_value,
+            metric=metric,
+            complement=complement,
+            path_id_col=path_id_col,
+        )
