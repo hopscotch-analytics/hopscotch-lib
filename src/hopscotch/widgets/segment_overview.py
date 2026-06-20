@@ -147,7 +147,7 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
                 complement=req.get("complement", False),
                 path_id_col=req.get("path_id_col"),
             )
-            self.dist_result = json.dumps(result, default=lambda x: None if (isinstance(x, float) and not (x == x)) else x)
+            self.dist_result = json.dumps(result, default=lambda x: None if (isinstance(x, float) and x != x) else x)
         except Exception as exc:
             self.dist_result = json.dumps({"error": str(exc)})
         finally:
