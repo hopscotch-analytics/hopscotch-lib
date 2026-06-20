@@ -330,3 +330,42 @@ class Eventstream:
             height=height         if height       is not None else _UNSET,
             sidebar_open=sidebar_open if sidebar_open is not None else _UNSET,
         )
+
+    def funnel(
+        self,
+        steps: list[str] | None = None,
+        diff=None,
+        path_id_col: str | None = None,
+        height: int | None = None,
+        object_name: str | None = None,
+        load_from: str | None = None,
+    ):
+        """Interactive funnel widget for Jupyter notebooks."""
+        from hopscotch.widgets.funnel import FunnelWidget, _UNSET
+        return FunnelWidget(
+            eventstream=self,
+            object_name=object_name,
+            load_from=load_from,
+            steps=steps             if steps        is not None else _UNSET,
+            diff=diff               if diff         is not None else _UNSET,
+            path_id_col=path_id_col if path_id_col  is not None else _UNSET,
+            height=height           if height       is not None else _UNSET,
+        )
+
+    def funnel_matrix(
+        self,
+        steps: list[str] | None = None,
+        diff=None,
+        path_id_col: str | None = None,
+    ) -> dict:
+        """Compute funnel conversion metrics and return a dict (headless).
+
+        Returns
+        -------
+        dict with key "steps", each item containing step name, unique_paths,
+        conversion_rate (and diff fields when diff is provided).
+        """
+        from hopscotch.tools.funnel import Funnel
+        if not steps:
+            return {"steps": []}
+        return Funnel(self).fit(steps=steps, diff=diff, path_id_col=path_id_col)
