@@ -411,6 +411,65 @@ class Eventstream:
             event_col=event_col,
         )
 
+    def cluster_analysis(
+        self,
+        features: list | None = None,
+        method: str | None = None,
+        scaler: str | None = None,
+        n_clusters=None,
+        metrics_config: list | None = None,
+        path_id_col: str | None = None,
+        height: int | None = None,
+        object_name: str | None = None,
+        load_from: str | None = None,
+    ):
+        """Interactive Cluster Analysis widget for Jupyter notebooks."""
+        from hopscotch.widgets.cluster_analysis import ClusterAnalysisWidget, _UNSET
+        return ClusterAnalysisWidget(
+            eventstream=self,
+            object_name=object_name,
+            load_from=load_from,
+            features=features       if features     is not None else _UNSET,
+            method=method           if method       is not None else _UNSET,
+            scaler=scaler           if scaler       is not None else _UNSET,
+            n_clusters=n_clusters   if n_clusters   is not None else _UNSET,
+            metrics_config=metrics_config if metrics_config is not None else _UNSET,
+            path_id_col=path_id_col if path_id_col  is not None else _UNSET,
+            height=height           if height       is not None else _UNSET,
+        )
+
+    def cluster_analysis_matrix(
+        self,
+        features: list,
+        method: str = "kmeans",
+        scaler: str | None = "minmax",
+        n_clusters=None,
+        min_cluster_size=None,
+        cluster_selection_epsilon=None,
+        nmf_k=None,
+        metrics_config: list | None = None,
+        path_id_col: str | None = None,
+        event_col: str | None = None,
+    ) -> dict:
+        """Run cluster analysis headlessly and return dict with overview_df / silhouette / nmf.
+
+        Pass lists for n_clusters / nmf_k / min_cluster_size to trigger grid search
+        with silhouette scoring.
+        """
+        from hopscotch.tools.cluster_analysis import ClusterAnalysis
+        return ClusterAnalysis(self).fit(
+            features_config=features,
+            method=method,
+            scaler=scaler,
+            n_clusters=n_clusters,
+            min_cluster_size=min_cluster_size,
+            cluster_selection_epsilon=cluster_selection_epsilon,
+            nmf_k=nmf_k,
+            metrics_config=metrics_config,
+            path_id_col=path_id_col,
+            event_col=event_col,
+        )
+
     def metric_distribution(
         self,
         segment_col: str,
