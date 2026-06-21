@@ -5,6 +5,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-21
+
+### Added
+- Cloud save/load for Transition Graph widget — save node positions, params and event visibility to Supabase; invite-only early access
+- `step_window` parameter added to `es.step_sankey()`
+- Cluster Analysis auto-computes on init when `features` are explicitly provided
+
+### Changed
+- Headless methods renamed to match widget names: `transition_graph_data`, `step_sankey_data`, `funnel_data`, `segment_overview_data`, `cluster_analysis_data`
+- Removed `paywall_required` traitlet and 1000-path limit from all widgets
+- Local widget state persistence (`object_name`, `load_from`) removed from all widgets except Transition Graph (cloud only)
+- `path_start` / `path_end` events can now be hidden and pinned in Search event panel
+
+### Fixed
+- JWT expiry check in `loadSession()` now decodes the actual token expiry
+- Token refresh via `refreshSession()` using Supabase refresh token
+- `path_start` / `path_end` event counts now correct in diff mode
+- StepSankey diff tooltip switched to light theme
+- Spinner colours unified to `--hs-yellow` CSS variable
+- Leftover `_save_path` references removed from cluster_analysis, segment_overview, step_sankey
+
 ## [0.3.2] - 2026-06-21
 
 ### Added
