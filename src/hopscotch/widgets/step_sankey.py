@@ -102,8 +102,6 @@ class StepSankeyWidget(anywidget.AnyWidget):
     def _on_positions_change(self, _change):
         if not self._initialized:
             return
-        if self._save_path:
-            self._schedule_save()
 
     def _on_compute_request(self, change):
         raw = change["new"]
