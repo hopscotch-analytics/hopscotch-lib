@@ -30,7 +30,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "mean"},
@@ -58,7 +58,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[],  # Empty config - only segment_size and segment_share
         )
@@ -87,7 +87,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[],
         )
@@ -116,7 +116,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "median"},
@@ -139,7 +139,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "q25"},
@@ -167,7 +167,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "complement_diff"},
@@ -194,7 +194,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "event_count", "metric_args": {"event": "checkout"}, "agg": "mean"},
@@ -218,7 +218,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "has", "metric_args": {"events": "purchase"}, "agg": "mean"},
@@ -249,7 +249,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment", "channel"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {
@@ -293,7 +293,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment", "channel"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {
@@ -327,7 +327,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "mean"},
@@ -354,7 +354,7 @@ class TestSegmentOverview:
         stream = Eventstream(df, schema)
 
         with pytest.raises(ValueError, match="Segment column 'invalid_segment' not found"):
-            stream.segment_overview_matrix(
+            stream.segment_overview_data(
                 segment_col="invalid_segment",
                 metrics_config=[{"metric": "length", "agg": "mean"}],
             )
@@ -369,7 +369,7 @@ class TestSegmentOverview:
         stream = Eventstream(df, schema)
 
         with pytest.raises(ValueError, match="Unknown aggregation type"):
-            stream.segment_overview_matrix(
+            stream.segment_overview_data(
                 segment_col="segment",
                 metrics_config=[{"metric": "length", "agg": "invalid_agg"}],
             )
@@ -385,7 +385,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[{"metric": "length"}],  # No 'agg' specified
         )
@@ -408,7 +408,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "duration", "agg": "mean"},
@@ -445,7 +445,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["country"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="country",
             metrics_config=[
                 {"metric": "length", "agg": "mean"},
@@ -474,7 +474,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["country"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="country",
             metrics_config=[
                 {"metric": "has", "metric_args": {"events": "purchase"}, "agg": "mean"},
@@ -497,7 +497,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "length", "agg": "mean"},
@@ -524,7 +524,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "has", "metric_args": {"events": ["purchase", "view"]}, "agg": "mean"},
@@ -560,7 +560,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "event_count", "metric_args": {"event": ["click", "scroll"]}, "agg": "mean"},
@@ -601,7 +601,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "time_between", "metric_args": {"event_from": "login", "event_to": "purchase"}, "agg": "mean"},
@@ -631,7 +631,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "time_between", "metric_args": {"event_from": "A", "event_to": "B"}, "agg": "median"},
@@ -659,7 +659,7 @@ class TestSegmentOverview:
         schema = {"event_cols": ["event"], "segment_cols": ["segment"]}
         stream = Eventstream(df, schema)
 
-        result = stream.segment_overview_matrix(
+        result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
                 {"metric": "time_between", "metric_args": {"event_from": "path_start", "event_to": "purchase"}, "agg": "mean"},

@@ -299,11 +299,11 @@ class StepMatrix:
             # Use original_pattern so skip_first_matrix logic applies correctly in each sub-call
             kwargs = dict(max_steps=max_steps, path_pattern=original_pattern, path_id_col=path_id_col)
             try:
-                sms1 = stream1.step_matrix(**kwargs)
+                sms1 = stream1.step_sankey_data(**kwargs)
             except PatternNoMatchError:
                 raise PatternNoMatchError(original_pattern, group="the first diff group")
             try:
-                sms2 = stream2.step_matrix(**kwargs)
+                sms2 = stream2.step_sankey_data(**kwargs)
             except PatternNoMatchError:
                 raise PatternNoMatchError(original_pattern, group="the second diff group")
 

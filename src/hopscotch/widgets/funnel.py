@@ -88,7 +88,7 @@ class FunnelWidget(anywidget.AnyWidget):
             steps = json.loads(self.steps) if self.steps else []
             diff  = _parse_diff(self.diff)
             pid   = self.path_id_col or None
-            result = self._eventstream.funnel_matrix(steps=steps, diff=diff, path_id_col=pid)
+            result = self._eventstream.funnel_data(steps=steps, diff=diff, path_id_col=pid)
             if diff and len(diff) == 3:
                 result["group1_label"] = str(diff[1])
                 result["group2_label"] = str(diff[2])
