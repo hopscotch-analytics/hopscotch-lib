@@ -34,6 +34,9 @@ class StepSankeyWidget(anywidget.AnyWidget):
     is_loading = traitlets.Bool(False).tag(sync=True)
     error      = traitlets.Unicode("").tag(sync=True)
 
+    # ── paywall ───────────────────────────────────────────────────────────────
+    paywall_required = traitlets.Bool(False).tag(sync=True)
+
     # ── display ───────────────────────────────────────────────────────────────
     widget_id    = traitlets.Unicode("").tag(sync=True)
     height       = traitlets.Int(500).tag(sync=True)
@@ -78,6 +81,13 @@ class StepSankeyWidget(anywidget.AnyWidget):
         except Exception:
             self.segment_levels = "{}"
         self.path_cols = json.dumps(eventstream.schema.path_cols)
+
+        # Paywall check
+        try:
+            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
+            self.paywall_required = n_paths > 1000
+        except Exception:
+            self.paywall_required = False
 
         # Load saved state
         saved = _load_state(self._load_path)
