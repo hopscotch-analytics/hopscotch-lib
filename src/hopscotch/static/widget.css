@@ -1,1 +1,5 @@
 /* Hopscotch widget styles */
+
+:root {
+  --hs-yellow: hsl(45, 93%, 58%);
+}

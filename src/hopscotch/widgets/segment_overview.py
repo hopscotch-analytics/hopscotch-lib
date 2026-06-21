@@ -1,7 +1,5 @@
 import json
 import pathlib
-import threading
-from datetime import datetime, timezone
 
 import anywidget
 import traitlets
@@ -51,8 +49,6 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
     def __init__(
         self,
         eventstream,
-        object_name: str | None = None,
-        load_from: str | None = None,
         segment_col=_UNSET,
         metrics_config=_UNSET,
         path_id_col=_UNSET,
@@ -63,10 +59,7 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self._eventstream = eventstream
         self._initialized = False
-        self._save_timer: threading.Timer | None = None
-        self._save_path, _wid = _resolve_storage(object_name, load_from)
-        self._load_path = _resolve_load_path(object_name, load_from)
-        self.widget_id = _wid
+        self.widget_id = ""
         self.widget_type = "segment_overview"
 
         # Catalogues
@@ -89,24 +82,17 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         except Exception:
             self.paywall_required = False
 
-        saved = _load_state(self._load_path)
-        p = saved.get("params", {})
-        d = saved.get("display", {})
-
-        self.segment_col    = segment_col    if segment_col    is not _UNSET else p.get("segment_col", "")
-        self.path_id_col    = path_id_col    if path_id_col    is not _UNSET else p.get("path_id_col", "")
-        _mc                 = metrics_config if metrics_config is not _UNSET else p.get("metrics_config", [])
+        self.segment_col    = segment_col    if segment_col    is not _UNSET else ""
+        self.path_id_col    = path_id_col    if path_id_col    is not _UNSET else ""
+        _mc                 = metrics_config if metrics_config is not _UNSET else []
         self.metrics_config = json.dumps(_mc) if isinstance(_mc, list) else (_mc or "[]")
-        self.height         = height         if height         is not _UNSET else d.get("height",       480)
-        self.sidebar_open   = sidebar_open   if sidebar_open   is not _UNSET else d.get("sidebar_open", True)
+        self.height         = height         if height         is not _UNSET else 480
+        self.sidebar_open   = sidebar_open   if sidebar_open   is not _UNSET else True
 
         if self.segment_col:
             self._recompute()
 
         self._initialized = True
-        if self._save_path:
-            self._save_state()
-
         self.observe(self._on_apply,        names=["apply_trigger"])
         self.observe(self._on_dist_request, names=["dist_request"])
 
@@ -116,8 +102,6 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         if not self._initialized:
             return
         self._recompute()
-        if self._save_path:
-            self._schedule_save()
 
     def _on_dist_request(self, change):
         raw = change["new"]
@@ -168,68 +152,9 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         finally:
             self.is_loading = False
 
-    # ── persistence ───────────────────────────────────────────────────────
-
-    def _save_state(self):
-        if not self._save_path:
-            return
-        try:
-            self._save_path.parent.mkdir(parents=True, exist_ok=True)
-            state = {
-                "version":  _STATE_VERSION,
-                "saved_at": datetime.now(timezone.utc).isoformat(),
-                "params": {
-                    "segment_col":    self.segment_col,
-                    "path_id_col":    self.path_id_col,
-                    "metrics_config": json.loads(self.metrics_config) if self.metrics_config else [],
-                },
-                "display": {
-                    "height":       self.height,
-                    "sidebar_open": self.sidebar_open,
-                },
-            }
-            self._save_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-
-    def _schedule_save(self):
-        if self._save_timer:
-            self._save_timer.cancel()
-        self._save_timer = threading.Timer(1.0, self._save_state)
-        self._save_timer.daemon = True
-        self._save_timer.start()
-
 
 def _safe(v):
     import math
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     return v
-
-
-def _resolve_storage(object_name, load_from):
-    widget_id = ""
-    save_path = None
-    if object_name:
-        save_path = pathlib.Path(".hopscotch") / f"{object_name}.json"
-        widget_id = object_name
-    if load_from and not widget_id:
-        widget_id = pathlib.Path(load_from).stem
-    return save_path, widget_id
-
-
-def _resolve_load_path(object_name, load_from):
-    if load_from:
-        return pathlib.Path(load_from)
-    if object_name:
-        return pathlib.Path(".hopscotch") / f"{object_name}.json"
-    return None
-
-
-def _load_state(load_path):
-    if load_path and load_path.exists():
-        try:
-            return json.loads(load_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {}
