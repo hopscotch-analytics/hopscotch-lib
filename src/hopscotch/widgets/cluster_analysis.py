@@ -5,7 +5,6 @@ import anywidget
 import traitlets
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
-_STATE_VERSION = 1
 _UNSET = object()
 
 from hopscotch.widgets._esm import _get_esm  # noqa: E402
@@ -109,14 +108,16 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
         self._initialized = True
         self.observe(self._on_apply, names=["apply_trigger"])
 
+        # Auto-compute when features were explicitly provided
+        if features is not _UNSET:
+            self._recompute()
+
     # ── observers ──────────────────────────────────────────────────────────
 
     def _on_apply(self, _change):
         if not self._initialized:
             return
         self._recompute()
-        if self._save_path:
-            self._schedule_save()
 
     # ── computation ────────────────────────────────────────────────────────
 
