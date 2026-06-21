@@ -263,7 +263,7 @@ class Eventstream:
         new_df, new_schema = dp.apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
-    def transition_matrix(
+    def transition_graph_data(
         self,
         values: T_TransitionMatrixValues = "proba_out",
         path_id_col: str | None = None,
@@ -272,7 +272,7 @@ class Eventstream:
         from hopscotch.tools.transition_matrix import TransitionMatrix
         return TransitionMatrix(self).fit(values, diff, path_id_col)
 
-    def step_matrix(
+    def step_sankey_data(
         self,
         max_steps: int = 10,
         diff: T_Diff = None,
@@ -352,7 +352,7 @@ class Eventstream:
             height=height           if height       is not None else _UNSET,
         )
 
-    def funnel_matrix(
+    def funnel_data(
         self,
         steps: list[str] | None = None,
         diff=None,
@@ -391,7 +391,7 @@ class Eventstream:
             height=height                 if height         is not None else _UNSET,
         )
 
-    def segment_overview_matrix(
+    def segment_overview_data(
         self,
         segment_col: str,
         metrics_config: list | None = None,
@@ -438,7 +438,7 @@ class Eventstream:
             height=height           if height       is not None else _UNSET,
         )
 
-    def cluster_analysis_matrix(
+    def cluster_analysis_data(
         self,
         features: list,
         method: str = "kmeans",

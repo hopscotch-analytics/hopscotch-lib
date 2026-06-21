@@ -136,7 +136,7 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
             nmf_k = _parse_n_clusters(self.nmf_k) if self.nmf_enabled and self.nmf_k else None
             pid = self.path_id_col or None
 
-            raw = self._eventstream.cluster_analysis_matrix(
+            raw = self._eventstream.cluster_analysis_data(
                 features=features,
                 method=self.method,
                 scaler=self.scaler or None,

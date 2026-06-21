@@ -112,7 +112,7 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         self.error = ""
         try:
             metrics = json.loads(self.metrics_config) if self.metrics_config else []
-            df = self._eventstream.segment_overview_matrix(
+            df = self._eventstream.segment_overview_data(
                 segment_col=self.segment_col,
                 metrics_config=metrics,
                 path_id_col=self.path_id_col or None,

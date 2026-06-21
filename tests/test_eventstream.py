@@ -53,9 +53,9 @@ def test_add_start_end_events(simple_df):
     assert "path_end" in event_types
 
 
-def test_transition_matrix_proba_out(simple_df):
+def test_transition_graph_data_proba_out(simple_df):
     es = Eventstream(simple_df)
-    tm = es.transition_matrix(values="proba_out")
+    tm = es.transition_graph_data(values="proba_out")
     assert "path_start" in tm.index
     assert "path_end" in tm.columns
     # Row sums (excluding NaN/zero rows) should be <= 1
@@ -64,23 +64,23 @@ def test_transition_matrix_proba_out(simple_df):
         assert s <= 1.01, f"Row sum {s} exceeds 1"
 
 
-def test_transition_matrix_count(simple_df):
+def test_transition_graph_data_count(simple_df):
     es = Eventstream(simple_df)
-    tm = es.transition_matrix(values="count")
+    tm = es.transition_graph_data(values="count")
     # Should be integer-like
     assert tm.values.dtype in (int, "int64", "float64")
     assert tm.sum().sum() > 0
 
 
-def test_transition_matrix_unique_paths(simple_df):
+def test_transition_graph_data_unique_paths(simple_df):
     es = Eventstream(simple_df)
-    tm = es.transition_matrix(values="unique_paths")
+    tm = es.transition_graph_data(values="unique_paths")
     assert tm.sum().sum() > 0
 
 
-def test_transition_matrix_proba_in(simple_df):
+def test_transition_graph_data_proba_in(simple_df):
     es = Eventstream(simple_df)
-    tm = es.transition_matrix(values="proba_in")
+    tm = es.transition_graph_data(values="proba_in")
     col_sums = tm.sum(axis=0)
     for s in col_sums:
         assert s <= 1.01, f"Col sum {s} exceeds 1"

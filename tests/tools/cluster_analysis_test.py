@@ -41,7 +41,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -67,7 +67,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -96,7 +96,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -118,7 +118,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -144,7 +144,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -166,7 +166,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -201,7 +201,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -226,7 +226,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -251,7 +251,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[
                 {"metric": "length"},
                 {"metric": "duration"},
@@ -279,7 +279,7 @@ class TestClusterAnalysis:
         df = get_df()
         stream = Eventstream(df)
 
-        result = stream.cluster_analysis_matrix(
+        result = stream.cluster_analysis_data(
             features=[{"metric": "length"}],
             method="kmeans",
             n_clusters=2,

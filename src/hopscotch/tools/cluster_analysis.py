@@ -272,7 +272,7 @@ class ClusterAnalysis:
 
         temp_stream = Eventstream(df, schema_dict, prepare=False)
 
-        return temp_stream.segment_overview_matrix(
+        return temp_stream.segment_overview_data(
             segment_col=SEGMENT_COL,
             metrics_config=metrics_config,
             path_id_col=path_id_col,

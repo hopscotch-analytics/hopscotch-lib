@@ -233,7 +233,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     # ── dispatch ──────────────────────────────────────────────────────────────
 
     def _dispatch(self, tool: str, params: dict):
-        if tool == "transition_matrix":
+        if tool == "transition_graph_data":
             return self._compute_tm_raw(
                 values=params.get("values", self.values),
                 path_id_col=params.get("path_id_col") or self.path_id_col or None,
@@ -285,7 +285,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
             self.is_loading = False
 
     def _compute_tm_raw(self, values: str, path_id_col=None, diff=None) -> dict:
-        tm = self._eventstream.transition_matrix(
+        tm = self._eventstream.transition_graph_data(
             values=values,
             path_id_col=path_id_col,
             diff=diff,

@@ -125,7 +125,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
     # ── dispatch ──────────────────────────────────────────────────────────────
 
     def _dispatch(self, tool: str, params: dict):
-        if tool == "step_matrix":
+        if tool == "step_sankey_data":
             return self._compute_raw(
                 max_steps=params.get("max_steps", self.max_steps),
                 path_id_col=params.get("path_id_col") or self.path_id_col or None,
@@ -154,7 +154,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
             self.is_loading = False
 
     def _compute_raw(self, max_steps: int, path_id_col=None, diff=None, path_pattern=None) -> dict:
-        raw = self._eventstream.step_matrix(
+        raw = self._eventstream.step_sankey_data(
             max_steps=max_steps,
             diff=diff,
             path_id_col=path_id_col,
