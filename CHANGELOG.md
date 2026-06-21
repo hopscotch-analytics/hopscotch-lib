@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-21
+
+### Added
+- "Manage saved widgets" link in cloud section — opens widget management page on the platform
+
+### Fixed
+- Auth overlay can now be closed with × button or Escape
+- Stable AuthGate DOM structure prevents Cytoscape from re-laying out nodes when overlay is toggled
+
 ## [0.3.3] - 2026-06-21
 
 ### Added
