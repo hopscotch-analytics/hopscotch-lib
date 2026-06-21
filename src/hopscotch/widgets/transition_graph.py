@@ -269,8 +269,17 @@ class TransitionGraphWidget(anywidget.AnyWidget):
             if diff_list:
                 try:
                     s1, s2 = self._eventstream.split_two(diff_list, path_id_col=self.path_id_col or None)
-                    self.event_counts_g1 = json.dumps(s1.get_event_counts())
-                    self.event_counts_g2 = json.dumps(s2.get_event_counts())
+                    c1 = s1.get_event_counts()
+                    c2 = s2.get_event_counts()
+                    # path_start/path_end are synthetic and filtered out by split_two;
+                    # their count equals the number of paths in each group
+                    pid = self.path_id_col or s1.schema.path_cols[0]
+                    for counts, s in ((c1, s1), (c2, s2)):
+                        n = int(s.df[pid].nunique())
+                        counts.setdefault("path_start", n)
+                        counts.setdefault("path_end", n)
+                    self.event_counts_g1 = json.dumps(c1)
+                    self.event_counts_g2 = json.dumps(c2)
                 except Exception:
                     self.event_counts_g1 = "{}"
                     self.event_counts_g2 = "{}"
