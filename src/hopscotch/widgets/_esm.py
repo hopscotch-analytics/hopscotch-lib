@@ -2,11 +2,8 @@
 
 Priority:
 1. Local file (dev mode — widget.js built next to the package).
-2. Download the JS source from the GitHub Release asset and return it as a
-   string.  anywidget creates a blob URL with Content-Type: text/javascript
-   from a plain string, bypassing the MIME-type issue that occurs when the
-   browser does import() directly on a GitHub asset URL
-   (served as application/octet-stream).
+2. Cached file in the static directory (downloaded on first use).
+3. Download from GitHub Release asset, cache it, and return as string.
 """
 import pathlib
 
@@ -24,11 +21,21 @@ def _get_esm() -> "pathlib.Path | str":
 
     try:
         from importlib.metadata import version as pkg_version
-        v = pkg_version("hopscotch")
+        v = pkg_version("hopscotch-analytics")
     except Exception:
         v = "latest"
+
+    cache = _STATIC / f"widget-{v}.js"
+    if cache.exists():
+        return cache
 
     import urllib.request
     url = _CDN_URL.format(version=v)
     with urllib.request.urlopen(url) as resp:
-        return resp.read().decode("utf-8")
+        js = resp.read().decode("utf-8")
+
+    try:
+        cache.write_text(js, encoding="utf-8")
+        return cache
+    except Exception:
+        return js
