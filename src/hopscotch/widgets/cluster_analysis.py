@@ -40,8 +40,6 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
     is_loading = traitlets.Bool(False).tag(sync=True)
     error      = traitlets.Unicode("").tag(sync=True)
 
-    # ── paywall ───────────────────────────────────────────────────────────────
-    paywall_required = traitlets.Bool(False).tag(sync=True)
 
     # ── display ────────────────────────────────────────────────────────────
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -80,12 +78,6 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
         except Exception:
             self.segment_levels = "{}"
 
-        # Paywall check
-        try:
-            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
-            self.paywall_required = n_paths > 1000
-        except Exception:
-            self.paywall_required = False
 
         _feat = features if features is not _UNSET else None
         if _feat is None:

@@ -36,8 +36,6 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     # ── widget type (used by the shared JS bundle to pick the right component) ─
     widget_type  = traitlets.Unicode("transition_graph").tag(sync=True)
 
-    # ── paywall ───────────────────────────────────────────────────────────────
-    paywall_required = traitlets.Bool(False).tag(sync=True)
 
     # ── event visibility (hidden/pinned per event) ────────────────────────────
     event_visibility = traitlets.Unicode("{}").tag(sync=True)  # JSON {id: {isHidden, isPinned}}
@@ -89,12 +87,6 @@ class TransitionGraphWidget(anywidget.AnyWidget):
             self.segment_levels = "{}"
         self.path_cols = json.dumps(eventstream.schema.path_cols)
 
-        # Paywall check
-        try:
-            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
-            self.paywall_required = n_paths > 1000
-        except Exception:
-            self.paywall_required = False
 
         try:
             self.event_counts = json.dumps(eventstream.get_event_counts())

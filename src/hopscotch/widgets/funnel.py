@@ -31,8 +31,6 @@ class FunnelWidget(anywidget.AnyWidget):
     is_loading = traitlets.Bool(False).tag(sync=True)
     error      = traitlets.Unicode("").tag(sync=True)
 
-    # ── paywall ───────────────────────────────────────────────────────────────
-    paywall_required = traitlets.Bool(False).tag(sync=True)
 
     # ── display ───────────────────────────────────────────────────────────────
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -65,12 +63,6 @@ class FunnelWidget(anywidget.AnyWidget):
         except Exception:
             self.segment_levels = "{}"
         self.path_cols = json.dumps(eventstream.schema.path_cols)
-
-        try:
-            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
-            self.paywall_required = n_paths > 1000
-        except Exception:
-            self.paywall_required = False
 
         _steps_val = steps if steps is not _UNSET else []
         self.steps        = json.dumps(_steps_val) if isinstance(_steps_val, list) else (_steps_val or "[]")
