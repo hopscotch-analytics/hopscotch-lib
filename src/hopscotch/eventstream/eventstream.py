@@ -291,20 +291,18 @@ class Eventstream:
         diff=None,
         path_id_col=None,
         path_pattern=None,
+        step_window=None,
         height=None,
         sidebar_open=None,
-        object_name: str | None = None,
-        load_from: str | None = None,
     ):
         from hopscotch.widgets.step_sankey import StepSankeyWidget, _UNSET
         return StepSankeyWidget(
             eventstream=self,
-            object_name=object_name,
-            load_from=load_from,
             max_steps=max_steps         if max_steps    is not None else _UNSET,
             diff=diff                   if diff         is not None else _UNSET,
             path_id_col=path_id_col     if path_id_col  is not None else _UNSET,
             path_pattern=path_pattern   if path_pattern is not None else _UNSET,
+            step_window=step_window     if step_window  is not None else _UNSET,
             height=height               if height       is not None else _UNSET,
             sidebar_open=sidebar_open   if sidebar_open is not None else _UNSET,
         )
