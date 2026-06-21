@@ -11,6 +11,7 @@ dependencies = [
     "pandas>=2.2",
     "duckdb>=1.1",
     "anywidget>=0.9",
+    "ipywidgets>=7.0",
     "traitlets>=5.0",
     "pyarrow>=14.0",
     "scikit-learn>=1.3",
