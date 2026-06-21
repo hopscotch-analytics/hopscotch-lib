@@ -40,6 +40,9 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
     dist_request = traitlets.Unicode("").tag(sync=True)
     dist_result  = traitlets.Unicode("{}").tag(sync=True)
 
+    # ── paywall ───────────────────────────────────────────────────────────────
+    paywall_required = traitlets.Bool(False).tag(sync=True)
+
     # ── display ───────────────────────────────────────────────────────────
     widget_id    = traitlets.Unicode("").tag(sync=True)
     height       = traitlets.Int(480).tag(sync=True)
@@ -78,6 +81,13 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
         except Exception:
             self.segment_levels = "{}"
         self.path_cols    = json.dumps(eventstream.schema.path_cols)
+
+        # Paywall check
+        try:
+            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
+            self.paywall_required = n_paths > 1000
+        except Exception:
+            self.paywall_required = False
 
         saved = _load_state(self._load_path)
         p = saved.get("params", {})

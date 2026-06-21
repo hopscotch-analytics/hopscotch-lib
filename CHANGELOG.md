@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-21
+
+### Added
+- `ipywidgets` added as a core dependency for out-of-the-box JupyterLab support
+- `paywall_required` traitlet added to all widgets (infrastructure for future freemium)
+
 ## [0.3.1] - 2026-06-21
 
 ### Fixed
