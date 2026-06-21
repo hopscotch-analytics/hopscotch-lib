@@ -717,12 +717,13 @@ wheels = [
 ]
 
 [[package]]
-name = "hopscotch"
-version = "0.2.2"
+name = "hopscotch-analytics"
+version = "0.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "anywidget" },
     { name = "duckdb" },
+    { name = "ipywidgets" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -754,6 +755,7 @@ requires-dist = [
     { name = "anywidget", specifier = ">=0.9" },
     { name = "duckdb", specifier = ">=1.1" },
     { name = "ipykernel", marker = "extra == 'dev'" },
+    { name = "ipywidgets", specifier = ">=7.0" },
     { name = "jupyterlab", marker = "extra == 'dev'" },
     { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "notebook", marker = "extra == 'dev'" },

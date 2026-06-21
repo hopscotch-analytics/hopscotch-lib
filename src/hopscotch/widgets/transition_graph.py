@@ -1,16 +1,15 @@
 import json
 import pathlib
 import threading
-from datetime import datetime, timezone
 
 import anywidget
 import traitlets
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
-_STATE_VERSION = 1
-_UNSET = object()  # sentinel: distinguishes "not provided" from an explicit value
+_UNSET = object()
 
 from hopscotch.widgets._esm import _get_esm  # noqa: E402
+from hopscotch.widgets import cloud as _cloud  # noqa: E402
 
 
 class TransitionGraphWidget(anywidget.AnyWidget):
@@ -37,9 +36,17 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     # ── widget type (used by the shared JS bundle to pick the right component) ─
     widget_type  = traitlets.Unicode("transition_graph").tag(sync=True)
 
-    # ── display / layout ──────────────────────────────────────────────────────
     # ── paywall ───────────────────────────────────────────────────────────────
     paywall_required = traitlets.Bool(False).tag(sync=True)
+
+    # ── event visibility (hidden/pinned per event) ────────────────────────────
+    event_visibility = traitlets.Unicode("{}").tag(sync=True)  # JSON {id: {isHidden, isPinned}}
+
+    # ── cloud ─────────────────────────────────────────────────────────────────
+    auth_token          = traitlets.Unicode("").tag(sync=True)
+    cloud_status        = traitlets.Unicode("idle").tag(sync=True)
+    cloud_load_trigger  = traitlets.Int(0).tag(sync=True)
+    cloud_save_request  = traitlets.Unicode("").tag(sync=True)  # JS sets name to save as
 
     # widget_id is passed to JS for unique localStorage keys
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -60,7 +67,6 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self,
         eventstream,
         object_name: str | None = None,
-        load_from: str | None = None,
         values=_UNSET,
         diff=_UNSET,
         path_id_col=_UNSET,
@@ -71,9 +77,10 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self._eventstream = eventstream
         self._initialized = False
-        self._save_timer: threading.Timer | None = None
-        self._save_path, self._load_path, _wid = _resolve_storage(object_name, load_from)
-        self.widget_id = _wid
+        self._object_name = object_name
+        self._cloud_save_timer: threading.Timer | None = None
+        self._loading_from_cloud = False
+        self.widget_id = object_name or ""
 
         # Catalogues
         try:
@@ -94,84 +101,125 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         except Exception:
             self.event_counts = "{}"
 
-        saved = self._load_state() if self._load_path else {}
-
-        # Explicit constructor args have priority; saved state fills gaps.
-        p = saved.get("params", {})
-        d = saved.get("display", {})
-        self.values       = values       if values       is not _UNSET else p.get("values",        "proba_out")
-        _diff_val         = diff         if diff         is not _UNSET else _parse_diff(p.get("diff", ""))
+        self.values       = values       if values       is not _UNSET else "proba_out"
+        _diff_val         = diff         if diff         is not _UNSET else None
         self.diff         = json.dumps(list(_diff_val)) if _diff_val else ""
-        self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else (p.get("path_id_col") or "")
-        self.height       = height       if height       is not _UNSET else d.get("height",        500)
-        self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else d.get("sidebar_open",  True)
-
-        # Positions from file → JS will use them as initialPositions prop
-        self.node_positions = json.dumps(saved.get("node_positions", {}))
+        self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else ""
+        self.height       = height       if height       is not _UNSET else 500
+        self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else True
+        self.node_positions = "{}"
 
         # Initial compute
         self._recompute()
 
         self._initialized = True
-        self.observe(self._on_params_change, names=["values", "diff", "path_id_col"])
-        self.observe(self._on_positions_change, names=["node_positions"])
-        self.observe(self._on_compute_request, names=["compute_request"])
-
-    # ── persistence ───────────────────────────────────────────────────────────
-
-    def _load_state(self) -> dict:
-        if self._load_path and self._load_path.exists():
-            try:
-                return json.loads(self._load_path.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-        return {}
-
-    def _save_state(self):
-        if not self._save_path:
-            return
-        try:
-            self._save_path.parent.mkdir(parents=True, exist_ok=True)
-            state = {
-                "version": _STATE_VERSION,
-                "saved_at": datetime.now(timezone.utc).isoformat(),
-                "params": {
-                    "values": self.values,
-                    "diff": self.diff,
-                    "path_id_col": self.path_id_col,
-                },
-                "display": {
-                    "height": self.height,
-                    "sidebar_open": self.sidebar_open,
-                },
-                "node_positions": json.loads(self.node_positions or "{}"),
-            }
-            self._save_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-
-    def _schedule_save(self):
-        """Debounce file writes — save 1 s after the last change."""
-        if self._save_timer:
-            self._save_timer.cancel()
-        self._save_timer = threading.Timer(1.0, self._save_state)
-        self._save_timer.daemon = True
-        self._save_timer.start()
+        self.observe(self._on_params_change,         names=["values", "diff", "path_id_col"])
+        self.observe(self._on_positions_change,      names=["node_positions"])
+        self.observe(self._on_event_visibility_change, names=["event_visibility"])
+        self.observe(self._on_compute_request,       names=["compute_request"])
+        self.observe(self._on_cloud_load_trigger,    names=["cloud_load_trigger"])
+        self.observe(self._on_cloud_save_request,    names=["cloud_save_request"])
 
     # ── observers ─────────────────────────────────────────────────────────────
 
     def _on_params_change(self, _change):
-        if not self._initialized:
+        if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._save_path:
-            self._schedule_save()
+        if self._object_name and self.auth_token:
+            self._schedule_cloud_save()
 
     def _on_positions_change(self, _change):
-        if not self._initialized:
+        if not self._initialized or self._loading_from_cloud:
             return
-        if self._save_path:
-            self._schedule_save()
+        if self._object_name and self.auth_token:
+            self._schedule_cloud_save()
+
+    def _on_event_visibility_change(self, _change):
+        if not self._initialized or self._loading_from_cloud:
+            return
+        if self._object_name and self.auth_token:
+            self._schedule_cloud_save()
+
+    def _on_cloud_load_trigger(self, change):
+        if change["new"] == 0:
+            return
+        if not self._object_name or not self.auth_token:
+            return
+        self._load_from_cloud()
+
+    def _on_cloud_save_request(self, change):
+        name = change["new"]
+        if not name or not self.auth_token:
+            return
+        self._object_name = name
+        self.widget_id = name
+        self._save_to_cloud()
+        self.cloud_save_request = ""  # clear after handling
+
+    # ── cloud ─────────────────────────────────────────────────────────────────
+
+    def _load_from_cloud(self):
+        self.cloud_status = "loading"
+        self._loading_from_cloud = True
+        try:
+            state = _cloud.load(self.auth_token, self._object_name)
+            if state:
+                self._apply_state(state)
+                self.cloud_status = "loaded"
+            else:
+                self.cloud_status = "idle"
+        except Exception as exc:
+            self.cloud_status = f"error:{exc}"
+        finally:
+            self._loading_from_cloud = False
+
+    def _save_to_cloud(self):
+        if not self._object_name or not self.auth_token:
+            return
+        self.cloud_status = "saving"
+        try:
+            _cloud.save(self.auth_token, self._object_name, "transition_graph", self._current_state())
+            self.cloud_status = "saved"
+        except Exception as exc:
+            self.cloud_status = f"error:{exc}"
+
+    def _schedule_cloud_save(self):
+        if self._cloud_save_timer:
+            self._cloud_save_timer.cancel()
+        self._cloud_save_timer = threading.Timer(1.0, self._save_to_cloud)
+        self._cloud_save_timer.daemon = True
+        self._cloud_save_timer.start()
+
+    def _current_state(self) -> dict:
+        return {
+            "params": {
+                "values":      self.values,
+                "diff":        self.diff,
+                "path_id_col": self.path_id_col,
+            },
+            "display": {
+                "height":       self.height,
+                "sidebar_open": self.sidebar_open,
+            },
+            "node_positions":  json.loads(self.node_positions or "{}"),
+            "event_visibility": json.loads(self.event_visibility or "{}"),
+        }
+
+    def _apply_state(self, state: dict) -> None:
+        p = state.get("params", {})
+        d = state.get("display", {})
+        self.values       = p.get("values", "proba_out")
+        _diff = _parse_diff(p.get("diff", ""))
+        self.diff         = json.dumps(list(_diff)) if _diff else ""
+        self.path_id_col  = p.get("path_id_col") or ""
+        self.height       = d.get("height", 500)
+        self.sidebar_open = d.get("sidebar_open", True)
+        pos = state.get("node_positions", {})
+        self.node_positions = json.dumps(pos) if pos else "{}"
+        ev = state.get("event_visibility", {})
+        self.event_visibility = json.dumps(ev) if ev else "{}"
+        self._recompute()
 
     def _on_compute_request(self, change):
         raw = change["new"]
@@ -266,34 +314,6 @@ class TransitionGraphWidget(anywidget.AnyWidget):
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
-
-def _resolve_storage(
-    object_name: str | None,
-    load_from: str | None,
-) -> tuple[pathlib.Path | None, pathlib.Path | None, str]:
-    """Return (save_path, load_path, widget_id).
-
-    object_name="foo"              → save + load: .hopscotch/foo.json  widget_id="foo"
-    load_from="./bar.json"         → load only from ./bar.json          widget_id="bar"
-    object_name + load_from        → load from load_from, save to .hopscotch/{name}.json
-    neither                        → no persistence
-    """
-    save_path: pathlib.Path | None = None
-    load_path: pathlib.Path | None = None
-    widget_id = ""
-
-    if object_name:
-        save_path = pathlib.Path(".hopscotch") / f"{object_name}.json"
-        load_path = save_path
-        widget_id = object_name
-
-    if load_from:
-        load_path = pathlib.Path(load_from)
-        if not widget_id:
-            widget_id = load_path.stem
-
-    return save_path, load_path, widget_id
-
 
 def _parse_diff(raw):
     if not raw:
