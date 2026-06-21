@@ -38,8 +38,6 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
     dist_request = traitlets.Unicode("").tag(sync=True)
     dist_result  = traitlets.Unicode("{}").tag(sync=True)
 
-    # ── paywall ───────────────────────────────────────────────────────────────
-    paywall_required = traitlets.Bool(False).tag(sync=True)
 
     # ── display ───────────────────────────────────────────────────────────
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -75,12 +73,6 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
             self.segment_levels = "{}"
         self.path_cols    = json.dumps(eventstream.schema.path_cols)
 
-        # Paywall check
-        try:
-            n_paths = eventstream.df[eventstream.schema.path_cols[0]].nunique()
-            self.paywall_required = n_paths > 1000
-        except Exception:
-            self.paywall_required = False
 
         self.segment_col    = segment_col    if segment_col    is not _UNSET else ""
         self.path_id_col    = path_id_col    if path_id_col    is not _UNSET else ""
