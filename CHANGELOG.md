@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-06-22
+
+### Added
+- Public README
+
+### Changed
+- API renames: `values` → `edge_weight` in `transition_graph()`, `values` → `by_column` in `filter_events()`, `object_name` → `cloud_file_name` in `transition_graph()`, `metrics` → `features` in `add_clusters()`
+- `load_from` parameter removed from all widget factory methods
+
 ## [0.3.4] - 2026-06-21
 
 ### Added
