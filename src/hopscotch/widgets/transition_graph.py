@@ -11,6 +11,11 @@ _UNSET = object()
 from hopscotch.widgets._esm import _get_esm  # noqa: E402
 from hopscotch.widgets import cloud as _cloud  # noqa: E402
 
+try:
+    from hopscotch._tracking import track as _track
+except Exception:
+    def _track(event, properties=None): pass  # type: ignore[misc]
+
 
 class TransitionGraphWidget(anywidget.AnyWidget):
     _esm = _get_esm()
@@ -155,7 +160,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     def _on_cloud_auth_shown(self, change):
         if change["new"] == 0:
             return
-        _t("cloud_auth_shown")
+        _track("cloud_auth_shown")
 
     def _on_auth_token(self, change):
         token = change["new"]
@@ -169,7 +174,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
             payload = _json.loads(_b64.urlsafe_b64decode(part))
             email = payload.get("email", "")
             if email:
-                _t("user_authenticated", email=email)
+                _track("user_authenticated", {"email": email})
                 try:
                     from hopscotch._tracking import _ph, _DISTINCT_ID
                     if _ph:
