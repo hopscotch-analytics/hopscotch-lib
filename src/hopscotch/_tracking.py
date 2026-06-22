@@ -121,6 +121,9 @@ def _no_track_requested() -> bool:
 
 # ── public API ─────────────────────────────────────────────────────────────────
 
+_depth = 0  # global call depth counter — suppresses nested tracked calls
+
+
 def track(event: str, properties: dict | None = None) -> None:
     """Fire-and-forget PostHog event. Never raises."""
     if _ph is None or _no_track_requested():
@@ -130,3 +133,28 @@ def track(event: str, properties: dict | None = None) -> None:
         _ph.capture(distinct_id=_DISTINCT_ID, event=event, properties=props)
     except Exception:
         pass
+
+
+def tracked(event_name: str, condition=None, props_fn=None):
+    """Decorator that tracks a method call only when not inside another tracked call.
+
+    condition: optional callable(self) → bool; if False, skip tracking but still execute.
+    props_fn:  optional callable(self) → dict; called after execution to collect properties.
+               Tracking fires after the method succeeds so props_fn has access to the result.
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            global _depth
+            skip = _depth > 0 or (condition is not None and not condition(args[0]))
+            if skip:
+                return func(*args, **kwargs)
+            _depth += 1
+            try:
+                result = func(*args, **kwargs)
+                props = props_fn(args[0]) if props_fn else None
+                track(event_name, props)
+                return result
+            finally:
+                _depth -= 1
+        return wrapper
+    return decorator
