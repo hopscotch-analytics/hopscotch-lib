@@ -50,7 +50,7 @@ class TestFilterPathsAST:
 
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2"]})
         assert res.equals(expected)
 
     def test__ast_condition_with_unknown_metric_raises(self) -> None:
@@ -70,7 +70,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "in", "metric": "event_count", "value": [2], "metric_args": {"event": "purchase"}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2"]})
         assert res.equals(expected)
 
     def test__ast_condition_in_boolean_has_flag(self) -> None:
@@ -78,7 +78,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "in", "metric": "has", "value": [False], "metric_args": {"events": "logout"}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_2", "user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2", "user_3"]})
         assert res.equals(expected)
 
     def test__pattern_simple_adjacent(self) -> None:
@@ -86,7 +86,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "purchase->cancellation"}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_3"]})
         assert res.equals(expected)
 
     def test__pattern_with_path_start_end_logout(self) -> None:
@@ -94,7 +94,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "path_start->.*->logout->path_end"}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1"]})
         assert res.equals(expected)
 
     def test__pattern_with_custom_path_id_col(self) -> None:
@@ -115,7 +115,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "promo_view->purchase"}}
         res = stream.filter_paths(ast_condition=ast_condition, path_id_col="session_id")
 
-        expected = stream.filter_events(values={"column": "session_id", "values": ["sess_1", "sess_2"]})
+        expected = stream.filter_events(by_column={"column": "session_id", "values": ["sess_1", "sess_2"]})
         assert res.equals(expected)
 
     def test__ast_with_custom_path_id_col(self) -> None:
@@ -136,7 +136,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}}
         res = stream.filter_paths(ast_condition=ast_condition, path_id_col="session_id")
 
-        expected = stream.filter_events(values={"column": "session_id", "values": ["sess_2"]})
+        expected = stream.filter_events(by_column={"column": "session_id", "values": ["sess_2"]})
         assert res.equals(expected)
 
     def test__ast_condition_has_with_list_of_events_all_present(self) -> None:
@@ -146,7 +146,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "has", "value": True, "metric_args": {"events": ["promo_view", "purchase"]}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
         assert res.equals(expected)
 
     def test__ast_condition_has_with_list_of_events_all_present_subset(self) -> None:
@@ -156,7 +156,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "has", "value": True, "metric_args": {"events": ["promo_view", "logout"]}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1"]})
         assert res.equals(expected)
 
     def test__ast_condition_has_with_list_of_events_at_least_one_absent(self) -> None:
@@ -166,7 +166,7 @@ class TestFilterPathsAST:
         ast_condition = {"op": "=", "metric": "has", "value": False, "metric_args": {"events": ["logout", "cancellation"]}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
         assert res.equals(expected)
 
     def test__ast_condition_has_with_list_combined_logic(self) -> None:
@@ -183,7 +183,7 @@ class TestFilterPathsAST:
 
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1", "user_2", "user_3"]})
         assert res.equals(expected)
 
     def test__matches_combined_with_metrics(self) -> None:
@@ -200,7 +200,7 @@ class TestFilterPathsAST:
 
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2"]})
         assert res.equals(expected)
 
     def test__belongs_to_any_mode_scalar_value(self) -> None:
@@ -214,7 +214,7 @@ class TestFilterPathsAST:
         }
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1", "user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1", "user_2"]})
         assert res.equals(expected)
 
     def test__belongs_to_all_mode_scalar_value(self) -> None:
@@ -228,7 +228,7 @@ class TestFilterPathsAST:
         }
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_3"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_3"]})
         assert res.equals(expected)
 
     def test__belongs_to_event_share_mode(self) -> None:
@@ -242,7 +242,7 @@ class TestFilterPathsAST:
         }
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_1", "user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_1", "user_2"]})
         assert res.equals(expected)
 
     def test__belongs_to_combined_with_other_metrics(self) -> None:
@@ -262,7 +262,7 @@ class TestFilterPathsAST:
         }
         res = stream.filter_paths(ast_condition=ast_condition)
 
-        expected = stream.filter_events(values={"column": "user_id", "values": ["user_2"]})
+        expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2"]})
         assert res.equals(expected)
 
     def test__belongs_to_none_segment_value_raises(self) -> None:

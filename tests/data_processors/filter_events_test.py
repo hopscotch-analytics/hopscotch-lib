@@ -20,7 +20,7 @@ class TestFilterEvents:
         schema = {"custom_cols": ["country"]}
         stream = Eventstream(df, schema)
 
-        res = stream.filter_events(values={"column": "event", "values": ["A", "C"]})
+        res = stream.filter_events(by_column={"column": "event", "values": ["A", "C"]})
 
         expected_columns = ["user_id", "event", "timestamp", "country"]
         expected = pd.DataFrame([
@@ -38,7 +38,7 @@ class TestFilterEvents:
         schema = {"custom_cols": ["country"]}
         stream = Eventstream(df, schema)
 
-        res = stream.filter_events(values={"column": "country", "values": ["US"]})
+        res = stream.filter_events(by_column={"column": "country", "values": ["US"]})
 
         expected_columns = ["user_id", "event", "timestamp", "country"]
         expected = pd.DataFrame([
@@ -57,7 +57,7 @@ class TestFilterEvents:
         schema = {"custom_cols": ["country"]}
         stream = Eventstream(df, schema)
 
-        res = stream.filter_events(values={"column": "event", "values": ["B"], "exclude": True})
+        res = stream.filter_events(by_column={"column": "event", "values": ["B"], "exclude": True})
 
         expected_columns = ["user_id", "event", "timestamp", "country"]
         expected = pd.DataFrame([
@@ -74,7 +74,7 @@ class TestFilterEvents:
         stream = Eventstream(get_df(), {"custom_cols": ["country"]})
 
         with pytest.raises(Exception):
-            stream.filter_events(values={"event": ["A"]})
+            stream.filter_events(by_column={"event": ["A"]})
 
     def test__func_events(self) -> None:
         df = get_df()

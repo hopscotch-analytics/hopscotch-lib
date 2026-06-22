@@ -20,11 +20,11 @@ def _user_id_from_token(token: str) -> str:
     return json.loads(base64.urlsafe_b64decode(part))["sub"]
 
 
-def save(token: str, object_name: str, widget_type: str, state: dict) -> None:
+def save(token: str, file_name: str, widget_type: str, state: dict) -> None:
     url = f"{_SUPABASE_URL}/rest/v1/{_TABLE}?on_conflict=user_id,object_name"
     payload = json.dumps({
         "user_id":     _user_id_from_token(token),
-        "object_name": object_name,
+        "object_name": file_name,
         "widget_type": widget_type,
         "state": state,
     }).encode()
@@ -37,9 +37,9 @@ def save(token: str, object_name: str, widget_type: str, state: dict) -> None:
         pass
 
 
-def load(token: str, object_name: str) -> dict | None:
+def load(token: str, file_name: str) -> dict | None:
     params = urllib.parse.urlencode({
-        "object_name": f"eq.{object_name}",
+        "object_name": f"eq.{file_name}",
         "select": "state",
         "limit": "1",
     })

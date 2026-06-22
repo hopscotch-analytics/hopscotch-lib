@@ -1,5 +1,5 @@
 """
-AddClusters - data processor for clustering trajectories based on metrics.
+AddClusters - data processor for clustering trajectories based on features.
 
 Clusters trajectories and adds a new segment column with cluster labels.
 Uses MetricBuilder for feature calculation.
@@ -26,13 +26,13 @@ T_Scaler = Literal["minmax", "std"] | None
 
 class AddClusters(DataProcessor):
     """
-    Data processor that clusters trajectories based on computed metrics.
+    Data processor that clusters trajectories based on computed features.
 
     Adds a new segment column containing cluster labels for each trajectory.
 
     Attributes:
         segment_name: Name of the new segment column
-        metrics: List of metric configurations (MetricBuilder format)
+        features: List of metric configurations (MetricBuilder format)
         method: Clustering method ("kmeans" or "hdbscan")
         scaler: Feature scaler method ("minmax", "std", or None)
         method_params: Parameters for the clustering algorithm
@@ -42,7 +42,7 @@ class AddClusters(DataProcessor):
     """
 
     segment_name: str
-    metrics: List[Dict[str, Any]]
+    features: List[Dict[str, Any]]
     method: T_ClusteringMethod
     scaler: T_Scaler
     method_params: Dict[str, Any]
@@ -55,7 +55,7 @@ class AddClusters(DataProcessor):
         self,
         eventstream: Any,
         segment_name: str,
-        metrics: List[Dict[str, Any]],
+        features: List[Dict[str, Any]],
         method: T_ClusteringMethod = "kmeans",
         scaler: T_Scaler = "minmax",
         n_clusters: int | None = None,
@@ -71,7 +71,7 @@ class AddClusters(DataProcessor):
         Args:
             eventstream: Eventstream instance for metric calculation
             segment_name: Name of the new segment column with cluster labels
-            metrics: List of metric configurations for MetricBuilder.
+            features: List of metric configurations for MetricBuilder.
                      Each config is a dict with 'metric' and optional 'metric_args'.
                      Example: [
                          {"metric": "length"},
@@ -89,7 +89,7 @@ class AddClusters(DataProcessor):
         """
         self.eventstream = eventstream
         self.segment_name = segment_name
-        self.metrics = metrics
+        self.features = features
         self.method = method
         self.scaler = scaler
         self.nmf_k = nmf_k
@@ -138,18 +138,18 @@ class AddClusters(DataProcessor):
         path_id_col = self.path_id_col or schema.path_col
         event_col = self.event_col or schema.event_col  # noqa: F841 - reserved for future use
 
-        # Build metrics using MetricBuilder
+        # Build features using MetricBuilder
         metric_builder = MetricBuilder(self.eventstream)
-        metrics_df = metric_builder.build_metrics(self.metrics, path_id_col)
+        metrics_df = metric_builder.build_metrics(self.features, path_id_col)
 
         if metrics_df.empty:
-            raise PreprocessingConfigError(PROCESSOR_NAME, "No metrics were computed. Check metric configurations.")
+            raise PreprocessingConfigError(PROCESSOR_NAME, "No features were computed. Check metric configurations.")
 
         # Handle NaN values - fill with 0 for clustering
         features = metrics_df.fillna(0).values
 
         if features.shape[1] == 0:
-            raise PreprocessingConfigError(PROCESSOR_NAME, "No feature columns were generated from metrics.")
+            raise PreprocessingConfigError(PROCESSOR_NAME, "No feature columns were generated from features.")
 
         # Apply scaling
         features_scaled = self._scale_features(features)

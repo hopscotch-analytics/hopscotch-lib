@@ -70,8 +70,8 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     def __init__(
         self,
         eventstream,
-        object_name: str | None = None,
-        values=_UNSET,
+        cloud_file_name: str | None = None,
+        edge_weight=_UNSET,
         diff=_UNSET,
         path_id_col=_UNSET,
         height=_UNSET,
@@ -81,10 +81,10 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self._eventstream = eventstream
         self._initialized = False
-        self._object_name = object_name
+        self._cloud_file_name = cloud_file_name
         self._cloud_save_timer: threading.Timer | None = None
         self._loading_from_cloud = False
-        self.widget_id = object_name or ""
+        self.widget_id = cloud_file_name or ""
 
         # Catalogues
         try:
@@ -99,7 +99,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         except Exception:
             self.event_counts = "{}"
 
-        self.values       = values       if values       is not _UNSET else "proba_out"
+        self.values       = edge_weight if edge_weight is not _UNSET else "proba_out"
         _diff_val         = diff         if diff         is not _UNSET else None
         self.diff         = json.dumps(list(_diff_val)) if _diff_val else ""
         self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else ""
@@ -126,25 +126,25 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._object_name and self.auth_token:
+        if self._cloud_file_name and self.auth_token:
             self._schedule_cloud_save()
 
     def _on_positions_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
-        if self._object_name and self.auth_token:
+        if self._cloud_file_name and self.auth_token:
             self._schedule_cloud_save()
 
     def _on_event_visibility_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
-        if self._object_name and self.auth_token:
+        if self._cloud_file_name and self.auth_token:
             self._schedule_cloud_save()
 
     def _on_cloud_load_trigger(self, change):
         if change["new"] == 0:
             return
-        if not self._object_name or not self.auth_token:
+        if not self._cloud_file_name or not self.auth_token:
             return
         self._load_from_cloud()
 
@@ -152,7 +152,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         name = change["new"]
         if not name or not self.auth_token:
             return
-        self._object_name = name
+        self._cloud_file_name = name
         self.widget_id = name
         self._save_to_cloud()
         self.cloud_save_request = ""  # clear after handling
@@ -190,7 +190,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self.cloud_status = "loading"
         self._loading_from_cloud = True
         try:
-            state = _cloud.load(self.auth_token, self._object_name)
+            state = _cloud.load(self.auth_token, self._cloud_file_name)
             if state:
                 self._apply_state(state)
                 self.cloud_status = "loaded"
@@ -202,11 +202,11 @@ class TransitionGraphWidget(anywidget.AnyWidget):
             self._loading_from_cloud = False
 
     def _save_to_cloud(self):
-        if not self._object_name or not self.auth_token:
+        if not self._cloud_file_name or not self.auth_token:
             return
         self.cloud_status = "saving"
         try:
-            _cloud.save(self.auth_token, self._object_name, "transition_graph", self._current_state())
+            _cloud.save(self.auth_token, self._cloud_file_name, "transition_graph", self._current_state())
             self.cloud_status = "saved"
         except Exception as exc:
             self.cloud_status = f"error:{exc}"

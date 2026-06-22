@@ -131,17 +131,17 @@ class Eventstream:
         }
 
     @_tracked("dp_filter_events")
-    def filter_events(self, values: dict | None = None, func=None, sql: str | None = None) -> "Eventstream":
+    def filter_events(self, by_column: dict | None = None, func=None, sql: str | None = None) -> "Eventstream":
         from hopscotch.data_processors.filter_events import FilterEvents
-        if values is None and func is None and sql is None:
+        if by_column is None and func is None and sql is None:
             return Eventstream(self._df.copy(), asdict(self.schema), prepare=False)
-        new_df, new_schema = FilterEvents(values=values, func=func, sql=sql).apply(self._df, self.schema)
+        new_df, new_schema = FilterEvents(values=by_column, func=func, sql=sql).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_add_clusters")
     def add_clusters(self, segment_name: str, features: list, method: str = "kmeans", scaler=None, n_clusters=None, min_cluster_size=None, cluster_selection_epsilon=None, nmf_k=None, path_id_col=None, event_col=None) -> "Eventstream":
         from hopscotch.data_processors.add_clusters import AddClusters
-        new_df, new_schema = AddClusters(eventstream=self, segment_name=segment_name, metrics=features, method=method, scaler=scaler, n_clusters=n_clusters, min_cluster_size=min_cluster_size, cluster_selection_epsilon=cluster_selection_epsilon, nmf_k=nmf_k, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        new_df, new_schema = AddClusters(eventstream=self, segment_name=segment_name, features=features, method=method, scaler=scaler, n_clusters=n_clusters, min_cluster_size=min_cluster_size, cluster_selection_epsilon=cluster_selection_epsilon, nmf_k=nmf_k, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_url_events")
@@ -188,7 +188,7 @@ class Eventstream:
         if len(path_ids) == 0:
             raise EmptyEventstreamError("no paths match the filter_paths condition")
 
-        result_stream = self.filter_events(values={"column": path_id_col, "values": path_ids})
+        result_stream = self.filter_events(by_column={"column": path_id_col, "values": path_ids})
         if result_stream.empty():
             raise EmptyEventstreamError("no events remain after filter_paths")
         return result_stream
@@ -345,20 +345,18 @@ class Eventstream:
     @_tracked("widget_transition_graph")
     def transition_graph(
         self,
-        values=None,
+        edge_weight=None,
         diff=None,
         path_id_col=None,
         height=None,
         sidebar_open=None,
-        object_name: str | None = None,
-        load_from: str | None = None,
+        cloud_file_name: str | None = None,
     ):
         from hopscotch.widgets.transition_graph import TransitionGraphWidget, _UNSET
         return TransitionGraphWidget(
             eventstream=self,
-            object_name=object_name,
-            load_from=load_from,
-            values=values         if values       is not None else _UNSET,
+            cloud_file_name=cloud_file_name,
+            edge_weight=edge_weight   if edge_weight is not None else _UNSET,
             diff=diff             if diff         is not None else _UNSET,
             path_id_col=path_id_col if path_id_col is not None else _UNSET,
             height=height         if height       is not None else _UNSET,
@@ -372,15 +370,11 @@ class Eventstream:
         diff=None,
         path_id_col: str | None = None,
         height: int | None = None,
-        object_name: str | None = None,
-        load_from: str | None = None,
     ):
         """Interactive funnel widget for Jupyter notebooks."""
         from hopscotch.widgets.funnel import FunnelWidget, _UNSET
         return FunnelWidget(
             eventstream=self,
-            object_name=object_name,
-            load_from=load_from,
             steps=steps             if steps        is not None else _UNSET,
             diff=diff               if diff         is not None else _UNSET,
             path_id_col=path_id_col if path_id_col  is not None else _UNSET,
@@ -413,15 +407,11 @@ class Eventstream:
         metrics_config: list | None = None,
         path_id_col: str | None = None,
         height: int | None = None,
-        object_name: str | None = None,
-        load_from: str | None = None,
     ):
         """Interactive Segment Overview heatmap widget for Jupyter notebooks."""
         from hopscotch.widgets.segment_overview import SegmentOverviewWidget, _UNSET
         return SegmentOverviewWidget(
             eventstream=self,
-            object_name=object_name,
-            load_from=load_from,
             segment_col=segment_col       if segment_col    is not None else _UNSET,
             metrics_config=metrics_config if metrics_config is not None else _UNSET,
             path_id_col=path_id_col       if path_id_col    is not None else _UNSET,
@@ -459,15 +449,11 @@ class Eventstream:
         metrics_config: list | None = None,
         path_id_col: str | None = None,
         height: int | None = None,
-        object_name: str | None = None,
-        load_from: str | None = None,
     ):
         """Interactive Cluster Analysis widget for Jupyter notebooks."""
         from hopscotch.widgets.cluster_analysis import ClusterAnalysisWidget, _UNSET
         return ClusterAnalysisWidget(
             eventstream=self,
-            object_name=object_name,
-            load_from=load_from,
             features=features       if features     is not None else _UNSET,
             method=method           if method       is not None else _UNSET,
             scaler=scaler           if scaler       is not None else _UNSET,
