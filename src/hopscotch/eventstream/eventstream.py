@@ -18,6 +18,20 @@ def _to_datetime_auto(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series)
 
 
+try:
+    from hopscotch._tracking import track as _track_event
+except Exception:
+    _track_event = None  # type: ignore[assignment]
+
+
+def _t(event: str, **props) -> None:
+    if _track_event:
+        try:
+            _track_event(event, props or None)
+        except Exception:
+            pass
+
+
 @dataclass
 class Eventstream:
     _df: pd.DataFrame | str
@@ -42,6 +56,12 @@ class Eventstream:
         else:
             for col in self.schema.event_cols + self.schema.segment_cols:
                 self._df[col] = self._df[col].astype("category")
+        rows, cols = self._df.shape
+        _t("eventstream_created",
+           rows=rows, cols=cols,
+           n_path_cols=len(self.schema.path_cols),
+           n_segment_cols=len(self.schema.segment_cols),
+           n_event_cols=len(self.schema.event_cols))
 
     def _prepare(self):
         if isinstance(self._df, str):
@@ -113,6 +133,7 @@ class Eventstream:
         }
 
     def filter_events(self, values: dict | None = None, func=None, sql: str | None = None) -> "Eventstream":
+        _t("dp_filter_events")
         from hopscotch.data_processors.filter_events import FilterEvents
         if values is None and func is None and sql is None:
             return Eventstream(self._df.copy(), asdict(self.schema), prepare=False)
@@ -120,16 +141,19 @@ class Eventstream:
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def add_clusters(self, segment_name: str, features: list, method: str = "kmeans", scaler=None, n_clusters=None, min_cluster_size=None, cluster_selection_epsilon=None, nmf_k=None, path_id_col=None, event_col=None) -> "Eventstream":
+        _t("dp_add_clusters")
         from hopscotch.data_processors.add_clusters import AddClusters
         new_df, new_schema = AddClusters(eventstream=self, segment_name=segment_name, metrics=features, method=method, scaler=scaler, n_clusters=n_clusters, min_cluster_size=min_cluster_size, cluster_selection_epsilon=cluster_selection_epsilon, nmf_k=nmf_k, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def url_events(self, column: str, nodes: list, strip_host: bool = True, strip_cgi: bool = True, strip_locale: bool = True, slug_enabled: bool = True, host_col=None, cgi_col=None, locale_col=None, slug_col=None) -> "Eventstream":
+        _t("dp_url_events")
         from hopscotch.data_processors.url_events import UrlEvents
         new_df, new_schema = UrlEvents(column=column, nodes=nodes, strip_host=strip_host, strip_cgi=strip_cgi, strip_locale=strip_locale, slug_enabled=slug_enabled, host_col=host_col, cgi_col=cgi_col, locale_col=locale_col, slug_col=slug_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def filter_paths(self, ast_condition: dict, path_id_col: str | None = None, event_col: str | None = None) -> "Eventstream":
+        _t("dp_filter_paths")
         """
         Filter paths based on an AST condition.
 
@@ -187,46 +211,55 @@ class Eventstream:
         return builder.build_metrics(metrics, path_id_col)
 
     def add_events(self, new_event_name: str, source_events=None, sql=None, churn=None) -> "Eventstream":
+        _t("dp_add_events")
         from hopscotch.data_processors.add_events import AddEvents
         new_df, new_schema = AddEvents(new_event_name, source_events=source_events, sql=sql, churn=churn).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def add_segment(self, name: str, values=None, func=None, sql=None) -> "Eventstream":
+        _t("dp_add_segment")
         from hopscotch.data_processors.add_segment import AddSegment
         new_df, new_schema = AddSegment(name, values=values, func=func, sql=sql).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, daily_states=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
+        _t("dp_collapse_events")
         from hopscotch.data_processors.collapse_events import CollapseEvents
         new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, daily_states=daily_states, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, new_schema.__dict__, prepare=False)
 
     def drop_segment(self, name: str) -> "Eventstream":
+        _t("dp_drop_segment")
         from hopscotch.data_processors.drop_segment import DropSegment
         new_df, new_schema = DropSegment(name).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def edit_events(self, rename=None, delete=None) -> "Eventstream":
+        _t("dp_edit_events")
         from hopscotch.data_processors.edit_events import EditEvents
         new_df, new_schema = EditEvents(rename=rename, delete=delete).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def rename_events(self, mapping: dict) -> "Eventstream":
+        _t("dp_rename_events")
         from hopscotch.data_processors.rename_events import RenameEvents
         new_df, new_schema = RenameEvents(mapping).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def sample_paths(self, sample_size, random_state=None, path_id_col=None) -> "Eventstream":
+        _t("dp_sample_paths")
         from hopscotch.data_processors.sample_paths import SamplePaths
         new_df, new_schema = SamplePaths(sample_size=sample_size, random_state=random_state, path_id_col=path_id_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def split_sessions(self, session_col="session_id", session_index_col="session_index", separator=None, start_event=None, end_event=None, timeout=None, path_id_col=None, event_col=None) -> "Eventstream":
+        _t("dp_split_sessions")
         from hopscotch.data_processors.split_sessions import SplitSessions
         new_df, new_schema = SplitSessions(session_col=session_col, session_index_col=session_index_col, separator=separator, start_event=start_event, end_event=end_event, timeout=timeout, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     def truncate_paths(self, left: str, right: str, path_id_col=None, event_col=None) -> "Eventstream":
+        _t("dp_truncate_paths")
         from hopscotch.data_processors.truncate_paths import TruncatePaths
         new_df, new_schema = TruncatePaths(left=left, right=right, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
@@ -258,6 +291,7 @@ class Eventstream:
         return s1, s2
 
     def add_start_end_events(self, path_id_col: str | None = None) -> "Eventstream":
+        _t("dp_add_start_end_events")
         from hopscotch.data_processors.add_start_end_events import AddStartEndEvents
         dp = AddStartEndEvents(path_id_col)
         new_df, new_schema = dp.apply(self._df, self.schema)
@@ -269,6 +303,7 @@ class Eventstream:
         path_id_col: str | None = None,
         diff: T_Diff = None,
     ) -> pd.DataFrame:
+        _t("headless_transition_graph")
         from hopscotch.tools.transition_matrix import TransitionMatrix
         return TransitionMatrix(self).fit(values, diff, path_id_col)
 
@@ -279,6 +314,7 @@ class Eventstream:
         path_id_col: str | None = None,
         path_pattern: str | None = None,
     ):
+        _t("headless_step_sankey")
         from hopscotch.tools.step_matrix import StepMatrix
         return StepMatrix(self).fit(
             max_steps=max_steps, diff=diff,
@@ -295,6 +331,7 @@ class Eventstream:
         height=None,
         sidebar_open=None,
     ):
+        _t("widget_step_sankey")
         from hopscotch.widgets.step_sankey import StepSankeyWidget, _UNSET
         return StepSankeyWidget(
             eventstream=self,
@@ -317,6 +354,7 @@ class Eventstream:
         object_name: str | None = None,
         load_from: str | None = None,
     ):
+        _t("widget_transition_graph")
         from hopscotch.widgets.transition_graph import TransitionGraphWidget, _UNSET
         return TransitionGraphWidget(
             eventstream=self,
@@ -338,6 +376,7 @@ class Eventstream:
         object_name: str | None = None,
         load_from: str | None = None,
     ):
+        _t("widget_funnel")
         """Interactive funnel widget for Jupyter notebooks."""
         from hopscotch.widgets.funnel import FunnelWidget, _UNSET
         return FunnelWidget(
@@ -356,6 +395,7 @@ class Eventstream:
         diff=None,
         path_id_col: str | None = None,
     ) -> dict:
+        _t("headless_funnel")
         """Compute funnel conversion metrics and return a dict (headless).
 
         Returns
@@ -377,6 +417,7 @@ class Eventstream:
         object_name: str | None = None,
         load_from: str | None = None,
     ):
+        _t("widget_segment_overview")
         """Interactive Segment Overview heatmap widget for Jupyter notebooks."""
         from hopscotch.widgets.segment_overview import SegmentOverviewWidget, _UNSET
         return SegmentOverviewWidget(
@@ -396,6 +437,7 @@ class Eventstream:
         path_id_col: str | None = None,
         event_col: str | None = None,
     ) -> "pd.DataFrame":
+        _t("headless_segment_overview")
         """Compute aggregated metrics across segment values (headless).
 
         Returns a DataFrame with metrics as rows and segment values as columns.
@@ -421,6 +463,7 @@ class Eventstream:
         object_name: str | None = None,
         load_from: str | None = None,
     ):
+        _t("widget_cluster_analysis")
         """Interactive Cluster Analysis widget for Jupyter notebooks."""
         from hopscotch.widgets.cluster_analysis import ClusterAnalysisWidget, _UNSET
         return ClusterAnalysisWidget(
@@ -449,6 +492,7 @@ class Eventstream:
         path_id_col: str | None = None,
         event_col: str | None = None,
     ) -> dict:
+        _t("headless_cluster_analysis")
         """Run cluster analysis headlessly and return dict with overview_df / silhouette / nmf.
 
         Pass lists for n_clusters / nmf_k / min_cluster_size to trigger grid search

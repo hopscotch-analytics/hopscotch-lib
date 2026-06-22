@@ -1,6 +1,8 @@
 import os
 from typing import Any
 
+os.environ["HOPSCOTCH_NO_TRACK"] = "1"
+
 import pandas as pd
 import pytest
 

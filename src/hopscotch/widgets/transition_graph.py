@@ -45,6 +45,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     cloud_status        = traitlets.Unicode("idle").tag(sync=True)
     cloud_load_trigger  = traitlets.Int(0).tag(sync=True)
     cloud_save_request  = traitlets.Unicode("").tag(sync=True)  # JS sets name to save as
+    cloud_auth_shown    = traitlets.Int(0).tag(sync=True)       # JS increments when auth overlay appears
 
     # widget_id is passed to JS for unique localStorage keys
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -111,6 +112,8 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self.observe(self._on_compute_request,       names=["compute_request"])
         self.observe(self._on_cloud_load_trigger,    names=["cloud_load_trigger"])
         self.observe(self._on_cloud_save_request,    names=["cloud_save_request"])
+        self.observe(self._on_cloud_auth_shown,      names=["cloud_auth_shown"])
+        self.observe(self._on_auth_token,            names=["auth_token"])
 
     # ── observers ─────────────────────────────────────────────────────────────
 
@@ -148,6 +151,33 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self.widget_id = name
         self._save_to_cloud()
         self.cloud_save_request = ""  # clear after handling
+
+    def _on_cloud_auth_shown(self, change):
+        if change["new"] == 0:
+            return
+        _t("cloud_auth_shown")
+
+    def _on_auth_token(self, change):
+        token = change["new"]
+        if not token:
+            return
+        try:
+            import base64 as _b64
+            import json as _json
+            part = token.split(".")[1]
+            part += "=" * (4 - len(part) % 4)
+            payload = _json.loads(_b64.urlsafe_b64decode(part))
+            email = payload.get("email", "")
+            if email:
+                _t("user_authenticated", email=email)
+                try:
+                    from hopscotch._tracking import _ph, _DISTINCT_ID
+                    if _ph:
+                        _ph.identify(_DISTINCT_ID, properties={"email": email})
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # ── cloud ─────────────────────────────────────────────────────────────────
 
