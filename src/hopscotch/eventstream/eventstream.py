@@ -1,5 +1,5 @@
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from functools import cached_property
 
 import duckdb
@@ -26,11 +26,12 @@ except Exception:
         return decorator
 
 
-@dataclass
 class Eventstream:
-    _df: pd.DataFrame | str
-    _schema: dict | None = field(default=None)
-    prepare: bool = field(default=True)
+    def __init__(self, df: "pd.DataFrame | str", schema: dict | None = None, prepare: bool = True):
+        self._df = df
+        self._schema = schema
+        self.prepare = prepare
+        self._post_init()
 
     @cached_property
     def schema(self) -> EventstreamSchema:
@@ -53,13 +54,12 @@ class Eventstream:
                   "n_segment_cols":  len(self.schema.segment_cols),
                   "n_event_cols":    len(self.schema.event_cols),
               })
-    def __post_init__(self):
+    def _post_init(self):
         if self.prepare:
             self._prepare()
         else:
             for col in self.schema.event_cols + self.schema.segment_cols:
                 self._df[col] = self._df[col].astype("category")
-        rows, cols = self._df.shape
 
     def _prepare(self):
         if isinstance(self._df, str):
