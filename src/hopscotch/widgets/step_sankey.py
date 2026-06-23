@@ -38,7 +38,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
     height       = traitlets.Int(500).tag(sync=True)
     sidebar_open = traitlets.Bool(True).tag(sync=True)
     # 0 = use default (3); >0 = show only this many variable columns per anchor
-    step_window  = traitlets.Int(0).tag(sync=True)
+    step_window  = traitlets.Int(3).tag(sync=True)
 
     # ── persistent state ──────────────────────────────────────────────────────
     node_positions = traitlets.Unicode("{}").tag(sync=True)
@@ -81,7 +81,7 @@ class StepSankeyWidget(anywidget.AnyWidget):
         self.path_pattern = path_pattern if path_pattern is not _UNSET else ""
         self.height       = height       if height       is not _UNSET else 500
         self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else True
-        self.step_window  = step_window  if step_window  is not _UNSET else 0
+        self.step_window  = step_window  if step_window  is not _UNSET else 3
         self.node_positions = "{}"
 
         self._recompute()
