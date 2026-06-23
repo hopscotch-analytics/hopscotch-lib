@@ -88,7 +88,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self.diff         = json.dumps(list(_diff_val)) if _diff_val else ""
         self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else ""
         self.path_pattern = path_pattern if path_pattern is not _UNSET else ""
-        self.height       = height       if height       is not _UNSET else 500
+        self.height       = height       if height       is not _UNSET else 600
         self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else True
 
         self._recompute()
@@ -205,7 +205,37 @@ class StepMatrixWidget(anywidget.AnyWidget):
         except Exception:
             event_counts = {}
 
-        return {"matrices": matrices, "event_counts": event_counts}
+        event_counts_g1: dict = {}
+        event_counts_g2: dict = {}
+        if diff is not None:
+            try:
+                import duckdb as _duckdb
+                _pid = path_id_col or self._eventstream.schema.path_col
+                _ec  = self._eventstream.schema.event_col
+                _df  = self._eventstream._df
+                _seg_col, _val1, _val2 = diff
+
+                for _val, _target in [(_val1, "event_counts_g1"), (_val2, "event_counts_g2")]:
+                    _d = _df[_df[_seg_col] == _val]
+                    _c = (_duckdb.sql(
+                        f"SELECT {_ec}, COUNT(DISTINCT {_pid}) AS cnt FROM _d GROUP BY {_ec}"
+                    ).df().set_index(_ec)["cnt"].to_dict())
+                    _c = {str(k): int(v) for k, v in _c.items()}
+                    _tot = int(_duckdb.sql(
+                        f"SELECT COUNT(DISTINCT {_pid}) FROM _d"
+                    ).fetchone()[0])
+                    for _syn in ("path_start", "path_end"):
+                        if _syn not in _c:
+                            _c[_syn] = _tot
+                    if _target == "event_counts_g1":
+                        event_counts_g1 = _c
+                    else:
+                        event_counts_g2 = _c
+            except Exception:
+                pass
+
+        return {"matrices": matrices, "event_counts": event_counts,
+                "event_counts_g1": event_counts_g1, "event_counts_g2": event_counts_g2}
 
     # ── cloud ─────────────────────────────────────────────────────────────────
 
