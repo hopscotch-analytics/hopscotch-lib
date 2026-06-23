@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-06-23
+
+### Changed
+- `Eventstream` converted from dataclass to regular class; constructor parameters renamed `_df` → `df`, `_schema` → `schema`
+- `step_window` default changed from `0` to `3` in `step_sankey()`
+
+### Fixed
+- `sidebar_open` parameter added to `funnel()`, `segment_overview()`, `cluster_analysis()` wrappers
+
 ## [0.3.5] - 2026-06-22
 
 ### Added
