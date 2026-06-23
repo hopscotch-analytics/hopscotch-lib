@@ -370,15 +370,17 @@ class Eventstream:
         diff=None,
         path_id_col: str | None = None,
         height: int | None = None,
+        sidebar_open: bool | None = None,
     ):
         """Interactive funnel widget for Jupyter notebooks."""
         from hopscotch.widgets.funnel import FunnelWidget, _UNSET
         return FunnelWidget(
             eventstream=self,
-            steps=steps             if steps        is not None else _UNSET,
-            diff=diff               if diff         is not None else _UNSET,
-            path_id_col=path_id_col if path_id_col  is not None else _UNSET,
-            height=height           if height       is not None else _UNSET,
+            steps=steps               if steps         is not None else _UNSET,
+            diff=diff                 if diff          is not None else _UNSET,
+            path_id_col=path_id_col   if path_id_col   is not None else _UNSET,
+            height=height             if height        is not None else _UNSET,
+            sidebar_open=sidebar_open if sidebar_open  is not None else _UNSET,
         )
 
     @_tracked("headless_funnel")
@@ -407,15 +409,17 @@ class Eventstream:
         metrics_config: list | None = None,
         path_id_col: str | None = None,
         height: int | None = None,
+        sidebar_open: bool | None = None,
     ):
         """Interactive Segment Overview heatmap widget for Jupyter notebooks."""
         from hopscotch.widgets.segment_overview import SegmentOverviewWidget, _UNSET
         return SegmentOverviewWidget(
             eventstream=self,
-            segment_col=segment_col       if segment_col    is not None else _UNSET,
-            metrics_config=metrics_config if metrics_config is not None else _UNSET,
-            path_id_col=path_id_col       if path_id_col    is not None else _UNSET,
-            height=height                 if height         is not None else _UNSET,
+            segment_col=segment_col         if segment_col    is not None else _UNSET,
+            metrics_config=metrics_config   if metrics_config is not None else _UNSET,
+            path_id_col=path_id_col         if path_id_col    is not None else _UNSET,
+            height=height                   if height         is not None else _UNSET,
+            sidebar_open=sidebar_open       if sidebar_open   is not None else _UNSET,
         )
 
     @_tracked("headless_segment_overview")
@@ -449,18 +453,20 @@ class Eventstream:
         metrics_config: list | None = None,
         path_id_col: str | None = None,
         height: int | None = None,
+        sidebar_open: bool | None = None,
     ):
         """Interactive Cluster Analysis widget for Jupyter notebooks."""
         from hopscotch.widgets.cluster_analysis import ClusterAnalysisWidget, _UNSET
         return ClusterAnalysisWidget(
             eventstream=self,
-            features=features       if features     is not None else _UNSET,
-            method=method           if method       is not None else _UNSET,
-            scaler=scaler           if scaler       is not None else _UNSET,
-            n_clusters=n_clusters   if n_clusters   is not None else _UNSET,
+            features=features             if features       is not None else _UNSET,
+            method=method                 if method         is not None else _UNSET,
+            scaler=scaler                 if scaler         is not None else _UNSET,
+            n_clusters=n_clusters         if n_clusters     is not None else _UNSET,
             metrics_config=metrics_config if metrics_config is not None else _UNSET,
-            path_id_col=path_id_col if path_id_col  is not None else _UNSET,
-            height=height           if height       is not None else _UNSET,
+            path_id_col=path_id_col       if path_id_col    is not None else _UNSET,
+            height=height                 if height         is not None else _UNSET,
+            sidebar_open=sidebar_open     if sidebar_open   is not None else _UNSET,
         )
 
     @_tracked("headless_cluster_analysis")
