@@ -342,6 +342,30 @@ class Eventstream:
             sidebar_open=sidebar_open   if sidebar_open is not None else _UNSET,
         )
 
+    @_tracked("widget_step_matrix")
+    def step_matrix(
+        self,
+        cloud_file_name: str | None = None,
+        max_steps=None,
+        diff=None,
+        path_id_col=None,
+        path_pattern=None,
+        height=None,
+        sidebar_open=None,
+    ):
+        """Interactive Step Matrix heatmap widget for Jupyter notebooks."""
+        from hopscotch.widgets.step_matrix import StepMatrixWidget, _UNSET
+        return StepMatrixWidget(
+            eventstream=self,
+            cloud_file_name=cloud_file_name,
+            max_steps=max_steps         if max_steps    is not None else _UNSET,
+            diff=diff                   if diff         is not None else _UNSET,
+            path_id_col=path_id_col     if path_id_col  is not None else _UNSET,
+            path_pattern=path_pattern   if path_pattern is not None else _UNSET,
+            height=height               if height       is not None else _UNSET,
+            sidebar_open=sidebar_open   if sidebar_open is not None else _UNSET,
+        )
+
     @_tracked("widget_transition_graph")
     def transition_graph(
         self,

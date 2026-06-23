@@ -188,6 +188,10 @@ class StepSankeyWidget(anywidget.AnyWidget):
                 .to_dict()
             )
             event_counts = {str(k): int(v) for k, v in counts.items()}
+            total_paths = int(duckdb.sql(f"SELECT COUNT(DISTINCT {path_col}) FROM df").fetchone()[0])
+            for synthetic in ("path_start", "path_end"):
+                if synthetic not in event_counts:
+                    event_counts[synthetic] = total_paths
         except Exception:
             event_counts = {}
 
