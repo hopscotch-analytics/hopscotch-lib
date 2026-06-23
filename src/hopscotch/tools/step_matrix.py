@@ -231,7 +231,7 @@ class StepMatrix:
 
             query = f"""
                 SELECT {path_id_col}, list_aggregate(list({event_col}), 'string_agg', '->') AS path
-                FROM df
+                FROM (SELECT * FROM df ORDER BY {path_id_col}, {index_col}, {subindex_col})
                 GROUP BY {path_id_col}
             """
             paths = duckdb.sql(query).df().set_index(path_id_col)["path"]
