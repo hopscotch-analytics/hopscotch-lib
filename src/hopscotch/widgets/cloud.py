@@ -37,6 +37,22 @@ def save(token: str, file_name: str, widget_type: str, state: dict) -> None:
         pass
 
 
+def exists(token: str, file_name: str) -> bool:
+    """Return True if a saved state with this name exists for the authenticated user."""
+    params = urllib.parse.urlencode({
+        "object_name": f"eq.{file_name}",
+        "select": "object_name",
+        "limit": "1",
+    })
+    url = f"{_SUPABASE_URL}/rest/v1/{_TABLE}?{params}"
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("apikey", _SUPABASE_ANON_KEY)
+    with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        data = json.loads(resp.read().decode())
+        return len(data) > 0
+
+
 def load(token: str, file_name: str) -> dict | None:
     params = urllib.parse.urlencode({
         "object_name": f"eq.{file_name}",

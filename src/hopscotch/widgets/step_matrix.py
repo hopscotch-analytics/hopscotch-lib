@@ -45,11 +45,14 @@ class StepMatrixWidget(anywidget.AnyWidget):
     cloud_load_trigger = traitlets.Int(0).tag(sync=True)
     cloud_save_request = traitlets.Unicode("").tag(sync=True)
     cloud_auth_shown   = traitlets.Int(0).tag(sync=True)
+    cloud_name_check   = traitlets.Unicode("").tag(sync=True)
+    cloud_name_exists  = traitlets.Bool(False).tag(sync=True)
 
     # ── display ───────────────────────────────────────────────────────────────
-    widget_id    = traitlets.Unicode("").tag(sync=True)
-    height       = traitlets.Int(500).tag(sync=True)
-    sidebar_open = traitlets.Bool(True).tag(sync=True)
+    widget_id     = traitlets.Unicode("").tag(sync=True)
+    height        = traitlets.Int(600).tag(sync=True)
+    sidebar_open  = traitlets.Bool(True).tag(sync=True)
+    display_prefs = traitlets.Unicode("{}").tag(sync=True)
 
     def __init__(
         self,
@@ -69,6 +72,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self._cloud_file_name = cloud_file_name
         self._cloud_save_timer: threading.Timer | None = None
         self._loading_from_cloud = False
+        self._cloud_load_success = False   # True only after successful cloud load
         self.widget_id = cloud_file_name or ""
         self.widget_type = "step_matrix"
 
@@ -91,14 +95,18 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self.height       = height       if height       is not _UNSET else 600
         self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else True
 
-        self._recompute()
+        # If cloud_file_name is set, defer recompute until cloud load succeeds
+        if not self._cloud_file_name:
+            self._recompute()
         self._initialized = True
 
-        self.observe(self._on_params_change,      names=["max_steps", "diff", "path_id_col", "path_pattern"])
-        self.observe(self._on_cloud_load_trigger, names=["cloud_load_trigger"])
-        self.observe(self._on_cloud_save_request, names=["cloud_save_request"])
-        self.observe(self._on_cloud_auth_shown,   names=["cloud_auth_shown"])
-        self.observe(self._on_auth_token,         names=["auth_token"])
+        self.observe(self._on_params_change,        names=["max_steps", "diff", "path_id_col", "path_pattern"])
+        self.observe(self._on_display_prefs_change, names=["display_prefs"])
+        self.observe(self._on_cloud_load_trigger,   names=["cloud_load_trigger"])
+        self.observe(self._on_cloud_save_request,   names=["cloud_save_request"])
+        self.observe(self._on_cloud_name_check,     names=["cloud_name_check"])
+        self.observe(self._on_cloud_auth_shown,     names=["cloud_auth_shown"])
+        self.observe(self._on_auth_token,           names=["auth_token"])
 
     # ── observers ─────────────────────────────────────────────────────────────
 
@@ -106,7 +114,22 @@ class StepMatrixWidget(anywidget.AnyWidget):
         if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._cloud_file_name and self.auth_token:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+            self._schedule_cloud_save()
+
+    def _on_cloud_name_check(self, change):
+        name = change["new"]
+        if not name or not self.auth_token:
+            return
+        try:
+            self.cloud_name_exists = _cloud.exists(self.auth_token, name)
+        except Exception:
+            self.cloud_name_exists = False
+
+    def _on_display_prefs_change(self, _change):
+        if not self._initialized or self._loading_from_cloud:
+            return
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
             self._schedule_cloud_save()
 
     def _on_cloud_load_trigger(self, change):
@@ -247,8 +270,9 @@ class StepMatrixWidget(anywidget.AnyWidget):
             if state:
                 self._apply_state(state)
                 self.cloud_status = "loaded"
+                self._cloud_load_success = True
             else:
-                self.cloud_status = "idle"
+                self.cloud_status = "error:File not found"
         except Exception as exc:
             self.cloud_status = f"error:{exc}"
         finally:
@@ -259,7 +283,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
             return
         self.cloud_status = "saving"
         try:
-            _cloud.save(self.auth_token, self._cloud_file_name, "step_matrix", self._current_state())
+            _cloud.save(self.auth_token, self._cloud_file_name, "Step Matrix", self._current_state())
             self.cloud_status = "saved"
         except Exception as exc:
             self.cloud_status = f"error:{exc}"
@@ -280,8 +304,9 @@ class StepMatrixWidget(anywidget.AnyWidget):
                 "path_pattern": self.path_pattern,
             },
             "display": {
-                "height":       self.height,
-                "sidebar_open": self.sidebar_open,
+                "height":        self.height,
+                "sidebar_open":  self.sidebar_open,
+                "display_prefs": self.display_prefs,
             },
         }
 
@@ -293,8 +318,9 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self.diff         = json.dumps(list(_diff)) if _diff else ""
         self.path_id_col  = p.get("path_id_col") or ""
         self.path_pattern = p.get("path_pattern") or ""
-        self.height       = d.get("height", 500)
+        self.height       = d.get("height", 600)
         self.sidebar_open = d.get("sidebar_open", True)
+        self.display_prefs = d.get("display_prefs", "{}")
         self._recompute()
 
 
