@@ -74,6 +74,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self._cloud_save_timer: threading.Timer | None = None
         self._loading_from_cloud = False
         self._cloud_load_success = False   # True only after successful cloud load
+        self._cloud_load_mismatch = False  # True if loaded state was for a different eventstream
         self.widget_id = cloud_file_name or ""
         self.widget_type = "step_matrix"
 
@@ -115,7 +116,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
         if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
             self._schedule_cloud_save()
 
     def _on_cloud_name_check(self, change):
@@ -130,7 +131,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
     def _on_display_prefs_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
             self._schedule_cloud_save()
 
     def _on_cloud_load_trigger(self, change):
@@ -355,11 +356,14 @@ class StepMatrixWidget(anywidget.AnyWidget):
             self.display_prefs = prefs_raw
 
         if mismatch or reset:
+            self._cloud_load_mismatch = True
             self.cloud_load_warning = (
                 "This configuration was saved for a different eventstream. "
-                "Some settings may not apply correctly."
+                "Some settings may not apply correctly. "
+                "Auto-save is disabled — save with a new name if you want to keep this configuration."
             )
         else:
+            self._cloud_load_mismatch = False
             self.cloud_load_warning = ""
 
         self._recompute()

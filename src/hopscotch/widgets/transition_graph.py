@@ -88,6 +88,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         self._cloud_save_timer: threading.Timer | None = None
         self._loading_from_cloud = False
         self._cloud_load_success = False
+        self._cloud_load_mismatch = False
         self.widget_id = cloud_file_name or ""
 
         # Catalogues
@@ -132,19 +133,19 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
             self._schedule_cloud_save()
 
     def _on_positions_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
             self._schedule_cloud_save()
 
     def _on_event_visibility_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success:
+        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
             self._schedule_cloud_save()
 
     def _on_cloud_load_trigger(self, change):
@@ -279,11 +280,14 @@ class TransitionGraphWidget(anywidget.AnyWidget):
         current_id = self._eventstream.fingerprint
         mismatch = bool(saved_id and current_id and saved_id != current_id)
         if mismatch or reset:
+            self._cloud_load_mismatch = True
             self.cloud_load_warning = (
                 "This configuration was saved for a different eventstream. "
-                "Some settings may not apply correctly."
+                "Some settings may not apply correctly. "
+                "Auto-save is disabled — save with a new name if you want to keep this configuration."
             )
         else:
+            self._cloud_load_mismatch = False
             self.cloud_load_warning = ""
         self._recompute()
 
