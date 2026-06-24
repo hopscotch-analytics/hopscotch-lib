@@ -7,7 +7,7 @@ class TestTransitionMatrix:
     def test__count(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="count")
+        res = stream.transition_graph_data(edge_weight="count")
 
         expected = pd.DataFrame([
             [0, 2, 1, 0, 0],
@@ -24,7 +24,7 @@ class TestTransitionMatrix:
     def test__transition_rate(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="transition_rate")
+        res = stream.transition_graph_data(edge_weight="transition_rate")
 
         expected = pd.DataFrame([
             [0, 2, 1, 0, 0],
@@ -42,7 +42,7 @@ class TestTransitionMatrix:
     def test__per_path(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="per_path")
+        res = stream.transition_graph_data(edge_weight="per_path")
 
         expected = pd.DataFrame([
             [0, 2, 1, 0, 0],
@@ -60,7 +60,7 @@ class TestTransitionMatrix:
     def test__proba_out(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="proba_out")
+        res = stream.transition_graph_data(edge_weight="proba_out")
 
         expected = pd.DataFrame([
             [0., 2/3,   1/3,   0.,   0.],
@@ -77,7 +77,7 @@ class TestTransitionMatrix:
     def test__proba_in(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="proba_in")
+        res = stream.transition_graph_data(edge_weight="proba_in")
 
         expected = pd.DataFrame([
             [0., 2/4, 1/10,  0.,  0.],
@@ -94,7 +94,7 @@ class TestTransitionMatrix:
     def test__path_id_col_count(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="count", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="count", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0, 2, 2, 0, 0],
@@ -111,7 +111,7 @@ class TestTransitionMatrix:
     def test__path_id_col_transition_rate(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="transition_rate", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="transition_rate", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0, 2, 2, 0, 0],
@@ -129,7 +129,7 @@ class TestTransitionMatrix:
     def test__path_id_col_per_path(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="per_path", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="per_path", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0, 2, 2, 0, 0],
@@ -147,7 +147,7 @@ class TestTransitionMatrix:
     def test__path_id_col_proba_out(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="proba_out", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="proba_out", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0., 2/4,   2/4,   0.,   0.],
@@ -164,7 +164,7 @@ class TestTransitionMatrix:
     def test__path_id_col_proba_in(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="proba_in", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="proba_in", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0., 2/4, 2/10,  0.,  0.],
@@ -181,7 +181,7 @@ class TestTransitionMatrix:
     def test__diff_segments(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"], "segment_cols": ["country"]})
-        res, _, _ = stream.transition_graph_data(values="count", path_id_col="session_id", diff=("country", "US", "UK"))
+        res, _, _ = stream.transition_graph_data(edge_weight="count", path_id_col="session_id", diff=("country", "US", "UK"))
 
         expected = pd.DataFrame([
             [0, 0, -2,  0,  0],
@@ -198,7 +198,7 @@ class TestTransitionMatrix:
     def test__diff_user_lists(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res, _, _ = stream.transition_graph_data(values="count", diff=(["user_1"], ["user_2", "user_3"]))
+        res, _, _ = stream.transition_graph_data(edge_weight="count", diff=(["user_1"], ["user_2", "user_3"]))
 
         expected = pd.DataFrame([
             [0,  0,  1,  0, 0],
@@ -215,7 +215,7 @@ class TestTransitionMatrix:
     def test__unique_paths(self, fx_read_csv):
         df = fx_read_csv("tools/transition_matrix_input.csv", sep="\t")
         stream = Eventstream(df, {"path_cols": ["user_id", "session_id"]})
-        res = stream.transition_graph_data(values="unique_paths", path_id_col="session_id")
+        res = stream.transition_graph_data(edge_weight="unique_paths", path_id_col="session_id")
 
         expected = pd.DataFrame([
             [0, 2, 2, 0, 0],
@@ -252,7 +252,7 @@ class TestTransitionMatrix:
         ], columns=["user_id", "event", "timestamp", "session_id", "country"])
 
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="time_median")
+        res = stream.transition_graph_data(edge_weight="time_median")
 
         expected = pd.DataFrame([
             [None,     0,    0, None],
@@ -278,7 +278,7 @@ class TestTransitionMatrix:
         df["user_id"] = "user_1"
 
         stream = Eventstream(df)
-        res = stream.transition_graph_data(values="time_q95")
+        res = stream.transition_graph_data(edge_weight="time_q95")
 
         expected = pd.DataFrame([
             [None,    0,  None],

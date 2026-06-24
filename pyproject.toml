@@ -35,6 +35,11 @@ packages = ["src/hopscotch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # sklearn convergence/future warnings on small test datasets are expected
+    "ignore::sklearn.exceptions.ConvergenceWarning",
+    "ignore::FutureWarning:sklearn",
+]
 
 [dependency-groups]
 dev = [

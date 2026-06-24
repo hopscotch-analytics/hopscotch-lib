@@ -145,6 +145,7 @@ class ClusterAnalysis:
             return HDBSCAN(
                 min_cluster_size=min_cluster_size or 5,
                 cluster_selection_epsilon=cluster_selection_epsilon or 0.0,
+                copy=True,
             ).fit_predict(features)
         else:
             raise ValueError(f"Unknown clustering method: {method}")
