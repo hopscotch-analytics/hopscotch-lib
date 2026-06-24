@@ -5,6 +5,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-24
+
+### Added
+- **Step Matrix widget** (`es.step_matrix()`) — interactive heatmap table showing step-by-step transition probabilities. Features: multi-block horizontal layout with serrated separators, resizable first column, sticky header, drag-and-drop row reordering, hidden events section, diff mode with per-group event counts, cell tooltips, "Go to" / "Search event" dropdown, path_pattern input with Apply button, global heatmap normalization across blocks, cloud save/load
+- **`Eventstream.fingerprint`** — cached content-based hash (MD5 of schema + event counts + shape) for detecting eventstream compatibility when loading cloud state
+- **`CloudMixin`** — reusable mixin (`src/hopscotch/widgets/cloud_mixin.py`) extracting all cloud save/load logic shared between widgets; new widgets can inherit it to get cloud support for free
+- **`_utils.py`** — shared `parse_diff()` helper extracted from widget modules
+- **`widget-utils.tsx`** — shared JS utilities: `parseJson`, `ComputingSpinner`, `HsSpinKeyframes` extracted from all widget files
+- **Cloud overwrite confirmation** — saving to an existing file name now shows a confirmation dialog
+- **Cloud error modal** — "File not found" and other cloud errors shown as dismissible modal instead of small badge
+- **Cloud state compatibility warning** — yellow banner when loaded state was saved for a different eventstream; auto-save disabled in this case to protect the saved file
+- **Auth continuation** — after authenticating, the action that triggered auth (e.g. opening save dialog) is automatically resumed
+- **Auto-save for Step Matrix** — when widget is loaded from cloud, display state changes auto-save after 1.5s debounce
+- **`isDirty` Apply buttons** — Apply button in segment_overview and cluster_analysis now appears (yellow) only when settings have changed; hidden otherwise
+- **No-data overlay** — Transition Graph shows "Loading…" / "No data" overlays when cloud_file_name is set but data not yet loaded
+- **"Search event" button** in Step Matrix header (renamed from "Go to…", styled to match Transition Graph)
+
+### Changed
+- **`edge_weight` parameter rename** — `transition_graph(values=...)` → `transition_graph(edge_weight=...)` and `transition_graph_data(values=...)` → `transition_graph_data(edge_weight=...)` for consistency
+- **Cloud save modal** redesigned as centered dialog with description note that only widget configuration is saved (not eventstream data)
+- **Filled pin icon** when active — pin icon fills with yellow color when pinned (same across Step Matrix and Transition Graph search dropdown)
+- **`CloudMixin` refactor** — `StepMatrixWidget` and `TransitionGraphWidget` now inherit shared cloud logic; cloud_file_name deferred recompute when file is set
+- **Save type names** standardised to Title Case: `"Step Matrix"` and `"Transition Graph"`
+- **Cluster Analysis tabs** layout fixed — Overview/Silhouette tabs now correctly appear above the content
+- Widget-level **`_parse_diff`** functions consolidated into `widgets/_utils.py`
+
+### Fixed
+- **SQL injection** in `funnel.py` — event names in DuckDB queries now properly escaped with single-quote doubling
+- **`asdict()` vs `__dict__`** — `collapse_events()` now uses `asdict(new_schema)` consistently with all other data processors
+- **Race condition** in `_schedule_cloud_save()` — timer is created and started before assigning to `self._cloud_save_timer`
+- **Cloud HTTP errors** now propagate as `RuntimeError` with descriptive message instead of being silently swallowed
+- **Schema validation** — `EventstreamSchema.__post_init__` now raises `ValueError` for empty `path_cols`/`event_cols` and duplicate column names
+- **HDBSCAN `copy` FutureWarning** — `copy=True` now explicitly passed
+- **Step Matrix ORDER BY** — paths query in `_process_pattern_matrix` now includes `ORDER BY` to ensure correct event sequence for center-position lookup
+- **Step Matrix block layout** — blocks now display horizontally (side by side) with serrated separators; subsequent blocks share rows with block 1
+- **Transition Graph edge_weight** — JS traitlet properly synced to renamed `edge_weight` key (was reading stale `values` key)
+- **`segment_overview` Apply button** — fixed `isDirty` ReferenceError (prop was used in `Sidebar` component but not declared)
+- Auto-save and recompute are now **blocked until initial cloud load completes** to prevent overwriting saved state with defaults on invalid `cloud_file_name`
+
 ## [0.3.6] - 2026-06-23
 
 ### Changed
