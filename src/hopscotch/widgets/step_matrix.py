@@ -1,59 +1,41 @@
 import json
 import pathlib
-import threading
 
 import anywidget
 import traitlets
 
+from hopscotch.widgets._esm import _get_esm
+from hopscotch.widgets.cloud_mixin import CloudMixin, _parse_diff
+
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
 
-from hopscotch.widgets._esm import _get_esm   # noqa: E402
-from hopscotch.widgets import cloud as _cloud  # noqa: E402
 
-try:
-    from hopscotch._tracking import track as _track
-except Exception:
-    def _track(event, properties=None): pass  # type: ignore[misc]
-
-
-class StepMatrixWidget(anywidget.AnyWidget):
+class StepMatrixWidget(CloudMixin, anywidget.AnyWidget):
     _esm = _get_esm()
     _css = _STATIC / "widget.css"
 
     widget_type = traitlets.Unicode("step_matrix").tag(sync=True)
 
-    # ── recompute triggers ────────────────────────────────────────────────────
+    # ── recompute triggers ─────────────────────────────────────────────────────
     max_steps    = traitlets.Int(10).tag(sync=True)
     diff         = traitlets.Unicode("").tag(sync=True)
     path_id_col  = traitlets.Unicode("").tag(sync=True)
     path_pattern = traitlets.Unicode("").tag(sync=True)
 
-    # ── catalogues ────────────────────────────────────────────────────────────
+    # ── catalogues ─────────────────────────────────────────────────────────────
     event_list     = traitlets.Unicode("[]").tag(sync=True)
     path_cols      = traitlets.Unicode("[]").tag(sync=True)
     segment_levels = traitlets.Unicode("{}").tag(sync=True)
 
-    # ── result ────────────────────────────────────────────────────────────────
+    # ── result ─────────────────────────────────────────────────────────────────
     result     = traitlets.Unicode("{}").tag(sync=True)
     is_loading = traitlets.Bool(False).tag(sync=True)
     error      = traitlets.Unicode("").tag(sync=True)
 
-    # ── cloud ─────────────────────────────────────────────────────────────────
-    auth_token         = traitlets.Unicode("").tag(sync=True)
-    cloud_status       = traitlets.Unicode("idle").tag(sync=True)
-    cloud_load_trigger = traitlets.Int(0).tag(sync=True)
-    cloud_save_request = traitlets.Unicode("").tag(sync=True)
-    cloud_auth_shown   = traitlets.Int(0).tag(sync=True)
-    cloud_name_check    = traitlets.Unicode("").tag(sync=True)
-    cloud_name_exists   = traitlets.Bool(False).tag(sync=True)
-    cloud_load_warning  = traitlets.Unicode("").tag(sync=True)
-
-    # ── display ───────────────────────────────────────────────────────────────
-    widget_id     = traitlets.Unicode("").tag(sync=True)
-    height        = traitlets.Int(600).tag(sync=True)
-    sidebar_open  = traitlets.Bool(True).tag(sync=True)
-    display_prefs = traitlets.Unicode("{}").tag(sync=True)
+    # ── display ────────────────────────────────────────────────────────────────
+    height       = traitlets.Int(600).tag(sync=True)
+    sidebar_open = traitlets.Bool(True).tag(sync=True)
 
     def __init__(
         self,
@@ -70,12 +52,6 @@ class StepMatrixWidget(anywidget.AnyWidget):
         super().__init__(**kwargs)
         self._eventstream = eventstream
         self._initialized = False
-        self._cloud_file_name = cloud_file_name
-        self._cloud_save_timer: threading.Timer | None = None
-        self._loading_from_cloud = False
-        self._cloud_load_success = False   # True only after successful cloud load
-        self._cloud_load_mismatch = False  # True if loaded state was for a different eventstream
-        self.widget_id = cloud_file_name or ""
         self.widget_type = "step_matrix"
 
         try:
@@ -97,83 +73,24 @@ class StepMatrixWidget(anywidget.AnyWidget):
         self.height       = height       if height       is not _UNSET else 600
         self.sidebar_open = sidebar_open if sidebar_open is not _UNSET else True
 
-        # If cloud_file_name is set, defer recompute until cloud load succeeds
+        self._init_cloud(cloud_file_name)  # registers all cloud observers
+
         if not self._cloud_file_name:
             self._recompute()
         self._initialized = True
 
-        self.observe(self._on_params_change,        names=["max_steps", "diff", "path_id_col", "path_pattern"])
-        self.observe(self._on_display_prefs_change, names=["display_prefs"])
-        self.observe(self._on_cloud_load_trigger,   names=["cloud_load_trigger"])
-        self.observe(self._on_cloud_save_request,   names=["cloud_save_request"])
-        self.observe(self._on_cloud_name_check,     names=["cloud_name_check"])
-        self.observe(self._on_cloud_auth_shown,     names=["cloud_auth_shown"])
-        self.observe(self._on_auth_token,           names=["auth_token"])
+        self.observe(self._on_params_change, names=["max_steps", "diff", "path_id_col", "path_pattern"])
 
-    # ── observers ─────────────────────────────────────────────────────────────
+    # ── widget-specific observer ───────────────────────────────────────────────
 
     def _on_params_change(self, _change):
         if not self._initialized or self._loading_from_cloud:
             return
         self._recompute()
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
+        if self._guard_auto_save():
             self._schedule_cloud_save()
 
-    def _on_cloud_name_check(self, change):
-        name = change["new"]
-        if not name or not self.auth_token:
-            return
-        try:
-            self.cloud_name_exists = _cloud.exists(self.auth_token, name)
-        except Exception:
-            self.cloud_name_exists = False
-
-    def _on_display_prefs_change(self, _change):
-        if not self._initialized or self._loading_from_cloud:
-            return
-        if self._cloud_file_name and self.auth_token and self._cloud_load_success and not self._cloud_load_mismatch:
-            self._schedule_cloud_save()
-
-    def _on_cloud_load_trigger(self, change):
-        if change["new"] == 0 or not self._cloud_file_name or not self.auth_token:
-            return
-        self._load_from_cloud()
-
-    def _on_cloud_save_request(self, change):
-        name = change["new"]
-        if not name or not self.auth_token:
-            return
-        self._cloud_file_name = name
-        self.widget_id = name
-        self._save_to_cloud()
-        self.cloud_save_request = ""
-
-    def _on_cloud_auth_shown(self, change):
-        if change["new"] == 0:
-            return
-        _track("cloud_auth_shown")
-
-    def _on_auth_token(self, change):
-        token = change["new"]
-        if not token:
-            return
-        try:
-            import base64 as _b64, json as _json
-            part = token.split(".")[1]
-            part += "=" * (4 - len(part) % 4)
-            email = _json.loads(_b64.urlsafe_b64decode(part)).get("email", "")
-            if email:
-                _track("user_authenticated", {"email": email})
-                try:
-                    from hopscotch._tracking import _ph, _DISTINCT_ID
-                    if _ph:
-                        _ph.identify(_DISTINCT_ID, properties={"email": email})
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    # ── computation ───────────────────────────────────────────────────────────
+    # ── computation ────────────────────────────────────────────────────────────
 
     def _recompute(self):
         self.is_loading = True
@@ -194,10 +111,8 @@ class StepMatrixWidget(anywidget.AnyWidget):
 
     def _compute_raw(self, max_steps, path_id_col=None, diff=None, path_pattern=None) -> dict:
         raw = self._eventstream.step_sankey_data(
-            max_steps=max_steps,
-            diff=diff,
-            path_id_col=path_id_col,
-            path_pattern=path_pattern,
+            max_steps=max_steps, diff=diff,
+            path_id_col=path_id_col, path_pattern=path_pattern,
         )
         if diff is not None:
             diff_sms, sms1, sms2 = raw
@@ -205,13 +120,11 @@ class StepMatrixWidget(anywidget.AnyWidget):
             g1 = [_df_to_matrix(sm) for sm in sms1]
             g2 = [_df_to_matrix(sm) for sm in sms2]
             for i, m in enumerate(matrices):
-                m["group1"] = g1[i]
-                m["group2"] = g2[i]
+                m["group1"] = g1[i]; m["group2"] = g2[i]
         else:
             matrices = [_df_to_matrix(sm) for sm in raw]
             for m in matrices:
-                m["group1"] = None
-                m["group2"] = None
+                m["group1"] = None; m["group2"] = None
 
         try:
             pid = path_id_col or self._eventstream.schema.path_col
@@ -224,9 +137,9 @@ class StepMatrixWidget(anywidget.AnyWidget):
             )
             event_counts = {str(k): int(v) for k, v in event_counts.items()}
             total_paths = int(duckdb.sql(f"SELECT COUNT(DISTINCT {pid}) FROM df").fetchone()[0])
-            for synthetic in ("path_start", "path_end"):
-                if synthetic not in event_counts:
-                    event_counts[synthetic] = total_paths
+            for s in ("path_start", "path_end"):
+                if s not in event_counts:
+                    event_counts[s] = total_paths
         except Exception:
             event_counts = {}
 
@@ -239,67 +152,27 @@ class StepMatrixWidget(anywidget.AnyWidget):
                 _ec  = self._eventstream.schema.event_col
                 _df  = self._eventstream._df
                 _seg_col, _val1, _val2 = diff
-
-                for _val, _target in [(_val1, "event_counts_g1"), (_val2, "event_counts_g2")]:
+                for _val, _target in [(_val1, "g1"), (_val2, "g2")]:
                     _d = _df[_df[_seg_col] == _val]
-                    _c = (_duckdb.sql(
-                        f"SELECT {_ec}, COUNT(DISTINCT {_pid}) AS cnt FROM _d GROUP BY {_ec}"
-                    ).df().set_index(_ec)["cnt"].to_dict())
+                    _c = (_duckdb.sql(f"SELECT {_ec}, COUNT(DISTINCT {_pid}) AS cnt FROM _d GROUP BY {_ec}")
+                          .df().set_index(_ec)["cnt"].to_dict())
                     _c = {str(k): int(v) for k, v in _c.items()}
-                    _tot = int(_duckdb.sql(
-                        f"SELECT COUNT(DISTINCT {_pid}) FROM _d"
-                    ).fetchone()[0])
-                    for _syn in ("path_start", "path_end"):
-                        if _syn not in _c:
-                            _c[_syn] = _tot
-                    if _target == "event_counts_g1":
-                        event_counts_g1 = _c
-                    else:
-                        event_counts_g2 = _c
+                    _tot = int(_duckdb.sql(f"SELECT COUNT(DISTINCT {_pid}) FROM _d").fetchone()[0])
+                    for _s in ("path_start", "path_end"):
+                        if _s not in _c: _c[_s] = _tot
+                    if _target == "g1": event_counts_g1 = _c
+                    else:               event_counts_g2 = _c
             except Exception:
                 pass
 
         return {"matrices": matrices, "event_counts": event_counts,
                 "event_counts_g1": event_counts_g1, "event_counts_g2": event_counts_g2}
 
-    # ── cloud ─────────────────────────────────────────────────────────────────
-
-    def _load_from_cloud(self):
-        self.cloud_status = "loading"
-        self._loading_from_cloud = True
-        try:
-            state = _cloud.load(self.auth_token, self._cloud_file_name)
-            if state:
-                self._apply_state(state)
-                self.cloud_status = "loaded"
-                self._cloud_load_success = True
-            else:
-                self.cloud_status = "error:File not found"
-        except Exception as exc:
-            self.cloud_status = f"error:{exc}"
-        finally:
-            self._loading_from_cloud = False
-
-    def _save_to_cloud(self):
-        if not self._cloud_file_name or not self.auth_token:
-            return
-        self.cloud_status = "saving"
-        try:
-            _cloud.save(self.auth_token, self._cloud_file_name, "Step Matrix", self._current_state())
-            self.cloud_status = "saved"
-        except Exception as exc:
-            self.cloud_status = f"error:{exc}"
-
-    def _schedule_cloud_save(self):
-        if self._cloud_save_timer:
-            self._cloud_save_timer.cancel()
-        self._cloud_save_timer = threading.Timer(1.0, self._save_to_cloud)
-        self._cloud_save_timer.daemon = True
-        self._cloud_save_timer.start()
+    # ── cloud state ────────────────────────────────────────────────────────────
 
     def _current_state(self) -> dict:
         return {
-            "eventstream_id": self._eventstream.fingerprint,
+            **self._base_state(),
             "params": {
                 "max_steps":    self.max_steps,
                 "diff":         self.diff,
@@ -316,69 +189,28 @@ class StepMatrixWidget(anywidget.AnyWidget):
     def _apply_state(self, state: dict) -> None:
         p = state.get("params", {})
         d = state.get("display", {})
-        es = self._eventstream
-        reset = False
 
-        self.max_steps = p.get("max_steps", 10)
-
-        # diff — apply only if segment column still exists
-        _diff = _parse_diff(p.get("diff", ""))
-        if _diff and _diff[0] not in es.schema.segment_cols:
-            _diff = None; reset = True
-        self.diff = json.dumps(list(_diff)) if _diff else ""
-
-        # path_id_col — apply only if column still exists
-        _pid = p.get("path_id_col") or ""
-        if _pid and _pid not in es.schema.path_cols:
-            _pid = ""; reset = True
-        self.path_id_col = _pid
-
+        self.max_steps    = p.get("max_steps", 10)
         self.path_pattern = p.get("path_pattern") or ""
         self.height       = d.get("height", 600)
         self.sidebar_open = d.get("sidebar_open", True)
 
-        # fingerprint check
-        saved_id   = state.get("eventstream_id", "")
-        current_id = es.fingerprint
-        mismatch   = bool(saved_id and current_id and saved_id != current_id)
+        _diff, _pid, mismatch = self._apply_base_state(state)
+        self.diff        = json.dumps(list(_diff)) if _diff else ""
+        self.path_id_col = _pid
 
-        # display_prefs — apply as-is, but reset popRange if eventstream changed
-        # (event counts will differ, preserving old range would hide all events)
         prefs_raw = d.get("display_prefs", "{}")
         if mismatch:
             try:
                 prefs = json.loads(prefs_raw or "{}")
-                prefs["popRange"] = [0, None]   # None → Infinity in JS
+                prefs["popRange"] = [0, None]
                 self.display_prefs = json.dumps(prefs)
             except Exception:
                 self.display_prefs = "{}"
         else:
             self.display_prefs = prefs_raw
 
-        if mismatch or reset:
-            self._cloud_load_mismatch = True
-            self.cloud_load_warning = (
-                "This configuration was saved for a different eventstream. "
-                "Some settings may not apply correctly. "
-                "Auto-save is disabled — save with a new name if you want to keep this configuration."
-            )
-        else:
-            self._cloud_load_mismatch = False
-            self.cloud_load_warning = ""
-
         self._recompute()
-
-
-def _parse_diff(raw):
-    if not raw:
-        return None
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else list(raw)
-        if isinstance(parsed, list) and len(parsed) == 3:
-            return parsed
-    except Exception:
-        pass
-    return None
 
 
 def _df_to_matrix(df) -> dict:
