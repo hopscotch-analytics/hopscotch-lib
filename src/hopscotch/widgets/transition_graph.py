@@ -53,6 +53,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     cloud_auth_shown    = traitlets.Int(0).tag(sync=True)
     cloud_name_check    = traitlets.Unicode("").tag(sync=True)
     cloud_name_exists   = traitlets.Bool(False).tag(sync=True)
+    cloud_load_warning  = traitlets.Unicode("").tag(sync=True)
 
     # widget_id is passed to JS for unique localStorage keys
     widget_id    = traitlets.Unicode("").tag(sync=True)
@@ -235,6 +236,7 @@ class TransitionGraphWidget(anywidget.AnyWidget):
 
     def _current_state(self) -> dict:
         return {
+            "eventstream_id":   self._eventstream.fingerprint,
             "params": {
                 "values":      self.values,
                 "diff":        self.diff,
@@ -251,16 +253,38 @@ class TransitionGraphWidget(anywidget.AnyWidget):
     def _apply_state(self, state: dict) -> None:
         p = state.get("params", {})
         d = state.get("display", {})
-        self.values       = p.get("values", "proba_out")
+        es = self._eventstream
+        reset = False
+
+        self.values = p.get("values", "proba_out")
+
+        # diff — apply only if segment column still exists
         _diff = _parse_diff(p.get("diff", ""))
-        self.diff         = json.dumps(list(_diff)) if _diff else ""
-        self.path_id_col  = p.get("path_id_col") or ""
+        if _diff and _diff[0] not in es.schema.segment_cols:
+            _diff = None; reset = True
+        self.diff = json.dumps(list(_diff)) if _diff else ""
+
+        # path_id_col — apply only if column still exists
+        _pid = p.get("path_id_col") or ""
+        if _pid and _pid not in es.schema.path_cols:
+            _pid = ""; reset = True
+        self.path_id_col = _pid
         self.height       = d.get("height", 500)
         self.sidebar_open = d.get("sidebar_open", True)
         pos = state.get("node_positions", {})
         self.node_positions = json.dumps(pos) if pos else "{}"
         ev = state.get("event_visibility", {})
         self.event_visibility = json.dumps(ev) if ev else "{}"
+        saved_id = state.get("eventstream_id", "")
+        current_id = self._eventstream.fingerprint
+        mismatch = bool(saved_id and current_id and saved_id != current_id)
+        if mismatch or reset:
+            self.cloud_load_warning = (
+                "This configuration was saved for a different eventstream. "
+                "Some settings may not apply correctly."
+            )
+        else:
+            self.cloud_load_warning = ""
         self._recompute()
 
     def _on_compute_request(self, change):

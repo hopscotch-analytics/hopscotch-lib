@@ -124,6 +124,32 @@ class Eventstream:
         query = f"SELECT {event_col}, COUNT(*) AS cnt FROM df GROUP BY {event_col}"
         return duckdb.sql(query).df().set_index(event_col)["cnt"].to_dict()
 
+    @cached_property
+    def fingerprint(self) -> str:
+        """Stable content-based hash identifying this eventstream's data shape and event distribution.
+        Computed once and cached. Not cryptographically unique — collisions are theoretically possible
+        but practically unlikely for datasets with different event sets or distributions."""
+        import hashlib
+        ec = self.schema.event_col
+        pc = self.schema.path_col
+        counts = sorted(
+            (str(k), int(v))
+            for k, v in self._df[ec].value_counts().items()
+        )
+        s = self.schema
+        payload = json.dumps({
+            "n_rows": len(self._df),
+            "n_paths": int(self._df[pc].nunique()),
+            "event_counts": counts,
+            "schema": {
+                "path_cols":    sorted(s.path_cols),
+                "event_cols":   sorted(s.event_cols),
+                "segment_cols": sorted(s.segment_cols),
+                "custom_cols":  sorted(s.custom_cols),
+            },
+        }, sort_keys=True)
+        return hashlib.md5(payload.encode()).hexdigest()
+
     def get_all_segment_levels(self) -> dict[str, list[str]]:
         return {
             col: self._df[col].cat.categories.tolist()

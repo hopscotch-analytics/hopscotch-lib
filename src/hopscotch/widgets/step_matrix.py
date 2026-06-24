@@ -45,8 +45,9 @@ class StepMatrixWidget(anywidget.AnyWidget):
     cloud_load_trigger = traitlets.Int(0).tag(sync=True)
     cloud_save_request = traitlets.Unicode("").tag(sync=True)
     cloud_auth_shown   = traitlets.Int(0).tag(sync=True)
-    cloud_name_check   = traitlets.Unicode("").tag(sync=True)
-    cloud_name_exists  = traitlets.Bool(False).tag(sync=True)
+    cloud_name_check    = traitlets.Unicode("").tag(sync=True)
+    cloud_name_exists   = traitlets.Bool(False).tag(sync=True)
+    cloud_load_warning  = traitlets.Unicode("").tag(sync=True)
 
     # ── display ───────────────────────────────────────────────────────────────
     widget_id     = traitlets.Unicode("").tag(sync=True)
@@ -297,6 +298,7 @@ class StepMatrixWidget(anywidget.AnyWidget):
 
     def _current_state(self) -> dict:
         return {
+            "eventstream_id": self._eventstream.fingerprint,
             "params": {
                 "max_steps":    self.max_steps,
                 "diff":         self.diff,
@@ -313,14 +315,53 @@ class StepMatrixWidget(anywidget.AnyWidget):
     def _apply_state(self, state: dict) -> None:
         p = state.get("params", {})
         d = state.get("display", {})
-        self.max_steps    = p.get("max_steps", 10)
+        es = self._eventstream
+        reset = False
+
+        self.max_steps = p.get("max_steps", 10)
+
+        # diff — apply only if segment column still exists
         _diff = _parse_diff(p.get("diff", ""))
-        self.diff         = json.dumps(list(_diff)) if _diff else ""
-        self.path_id_col  = p.get("path_id_col") or ""
+        if _diff and _diff[0] not in es.schema.segment_cols:
+            _diff = None; reset = True
+        self.diff = json.dumps(list(_diff)) if _diff else ""
+
+        # path_id_col — apply only if column still exists
+        _pid = p.get("path_id_col") or ""
+        if _pid and _pid not in es.schema.path_cols:
+            _pid = ""; reset = True
+        self.path_id_col = _pid
+
         self.path_pattern = p.get("path_pattern") or ""
         self.height       = d.get("height", 600)
         self.sidebar_open = d.get("sidebar_open", True)
-        self.display_prefs = d.get("display_prefs", "{}")
+
+        # fingerprint check
+        saved_id   = state.get("eventstream_id", "")
+        current_id = es.fingerprint
+        mismatch   = bool(saved_id and current_id and saved_id != current_id)
+
+        # display_prefs — apply as-is, but reset popRange if eventstream changed
+        # (event counts will differ, preserving old range would hide all events)
+        prefs_raw = d.get("display_prefs", "{}")
+        if mismatch:
+            try:
+                prefs = json.loads(prefs_raw or "{}")
+                prefs["popRange"] = [0, None]   # None → Infinity in JS
+                self.display_prefs = json.dumps(prefs)
+            except Exception:
+                self.display_prefs = "{}"
+        else:
+            self.display_prefs = prefs_raw
+
+        if mismatch or reset:
+            self.cloud_load_warning = (
+                "This configuration was saved for a different eventstream. "
+                "Some settings may not apply correctly."
+            )
+        else:
+            self.cloud_load_warning = ""
+
         self._recompute()
 
 
