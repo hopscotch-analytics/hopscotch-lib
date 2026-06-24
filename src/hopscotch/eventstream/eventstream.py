@@ -250,7 +250,7 @@ class Eventstream:
     def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, daily_states=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
         from hopscotch.data_processors.collapse_events import CollapseEvents
         new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, daily_states=daily_states, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
-        return Eventstream(new_df, new_schema.__dict__, prepare=False)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_drop_segment")
     def drop_segment(self, name: str) -> "Eventstream":
@@ -324,12 +324,12 @@ class Eventstream:
     @_tracked("headless_transition_graph")
     def transition_graph_data(
         self,
-        values: T_TransitionMatrixValues = "proba_out",
+        edge_weight: T_TransitionMatrixValues = "proba_out",
         path_id_col: str | None = None,
         diff: T_Diff = None,
     ) -> pd.DataFrame:
         from hopscotch.tools.transition_matrix import TransitionMatrix
-        return TransitionMatrix(self).fit(values, diff, path_id_col)
+        return TransitionMatrix(self).fit(edge_weight, diff, path_id_col)
 
     @_tracked("headless_step_sankey")
     def step_sankey_data(

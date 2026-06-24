@@ -5,7 +5,8 @@ import anywidget
 import traitlets
 
 from hopscotch.widgets._esm import _get_esm
-from hopscotch.widgets.cloud_mixin import CloudMixin, _parse_diff
+from hopscotch.widgets.cloud_mixin import CloudMixin
+from hopscotch.widgets._utils import parse_diff as _parse_diff
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()

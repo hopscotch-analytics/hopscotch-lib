@@ -8,6 +8,11 @@ if False:
     from hopscotch.eventstream.eventstream import Eventstream  # noqa: F401
 
 
+def _sql_str(value: str) -> str:
+    """Escape a string value for safe embedding in a DuckDB SQL literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
 @dataclass
 class Funnel:
     eventstream: "Eventstream"
@@ -28,20 +33,21 @@ class Funnel:
             funnel_data = []
 
             for step_idx, step_event in enumerate(steps):
+                ev = _sql_str(step_event)
                 if step_idx == 0:
                     query = f"""
                         SELECT COUNT(DISTINCT {path_id_col}) AS count
                         FROM df
-                        WHERE {event_col} = '{step_event}'
+                        WHERE {event_col} = {ev}
                     """
                 else:
                     prev_conditions = " AND ".join([
-                        f"SUM(CASE WHEN {event_col} = '{steps[i]}' THEN 1 ELSE 0 END) > 0"
+                        f"SUM(CASE WHEN {event_col} = {_sql_str(steps[i])} THEN 1 ELSE 0 END) > 0"
                         for i in range(step_idx)
                     ])
                     order_conditions = " AND ".join([
-                        f"MAX(CASE WHEN {event_col} = '{steps[i]}' THEN {index_col} ELSE 0 END) < "
-                        f"MAX(CASE WHEN {event_col} = '{steps[i+1]}' THEN {index_col} ELSE 0 END)"
+                        f"MAX(CASE WHEN {event_col} = {_sql_str(steps[i])} THEN {index_col} ELSE 0 END) < "
+                        f"MAX(CASE WHEN {event_col} = {_sql_str(steps[i+1])} THEN {index_col} ELSE 0 END)"
                         for i in range(step_idx)
                     ])
                     query = f"""
@@ -51,7 +57,7 @@ class Funnel:
                             FROM df
                             GROUP BY {path_id_col}
                             HAVING {prev_conditions}
-                              AND SUM(CASE WHEN {event_col} = '{step_event}' THEN 1 ELSE 0 END) > 0
+                              AND SUM(CASE WHEN {event_col} = {ev} THEN 1 ELSE 0 END) > 0
                               AND {order_conditions}
                         )
                     """

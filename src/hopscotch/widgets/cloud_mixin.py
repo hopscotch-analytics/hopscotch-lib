@@ -21,16 +21,7 @@ _WARNING_MISMATCH = (
 )
 
 
-def _parse_diff(raw):
-    if not raw:
-        return None
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else list(raw)
-        if isinstance(parsed, list) and len(parsed) == 3:
-            return parsed
-    except Exception:
-        pass
-    return None
+from hopscotch.widgets._utils import parse_diff as _parse_diff  # re-export for existing importers
 
 
 class CloudMixin(traitlets.HasTraits):
@@ -171,9 +162,10 @@ class CloudMixin(traitlets.HasTraits):
     def _schedule_cloud_save(self):
         if self._cloud_save_timer:
             self._cloud_save_timer.cancel()
-        self._cloud_save_timer = threading.Timer(1.0, self._save_to_cloud)
-        self._cloud_save_timer.daemon = True
-        self._cloud_save_timer.start()
+        timer = threading.Timer(1.0, self._save_to_cloud)
+        timer.daemon = True
+        timer.start()
+        self._cloud_save_timer = timer
 
     # ── Shared state helpers ──────────────────────────────────────────────────
 

@@ -5,7 +5,8 @@ import anywidget
 import traitlets
 
 from hopscotch.widgets._esm import _get_esm
-from hopscotch.widgets.cloud_mixin import CloudMixin, _parse_diff
+from hopscotch.widgets.cloud_mixin import CloudMixin
+from hopscotch.widgets._utils import parse_diff as _parse_diff
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
@@ -18,7 +19,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
     widget_type  = traitlets.Unicode("transition_graph").tag(sync=True)
 
     # ── recompute triggers ─────────────────────────────────────────────────────
-    values      = traitlets.Unicode("proba_out").tag(sync=True)
+    edge_weight = traitlets.Unicode("proba_out").tag(sync=True)
     diff        = traitlets.Unicode("").tag(sync=True)
     path_id_col = traitlets.Unicode("").tag(sync=True)
 
@@ -69,7 +70,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         except Exception:
             self.event_counts = "{}"
 
-        self.values       = edge_weight if edge_weight is not _UNSET else "proba_out"
+        self.edge_weight  = edge_weight if edge_weight is not _UNSET else "proba_out"
         _diff_val         = diff         if diff         is not _UNSET else None
         self.diff         = json.dumps(list(_diff_val)) if _diff_val else ""
         self.path_id_col  = path_id_col  if path_id_col  is not _UNSET else ""
@@ -83,7 +84,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
             self._recompute()
 
         self._initialized = True
-        self.observe(self._on_params_change,           names=["values", "diff", "path_id_col"])
+        self.observe(self._on_params_change,           names=["edge_weight", "diff", "path_id_col"])
         self.observe(self._on_positions_change,        names=["node_positions"])
         self.observe(self._on_event_visibility_change, names=["event_visibility"])
         self.observe(self._on_compute_request,         names=["compute_request"])
@@ -132,7 +133,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         return {
             **self._base_state(),
             "params": {
-                "values":      self.values,
+                "edge_weight": self.edge_weight,
                 "diff":        self.diff,
                 "path_id_col": self.path_id_col,
             },
@@ -148,7 +149,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         p = state.get("params", {})
         d = state.get("display", {})
 
-        self.values       = p.get("values", "proba_out")
+        self.edge_weight  = p.get("edge_weight", "proba_out")
         self.height       = d.get("height", 500)
         self.sidebar_open = d.get("sidebar_open", True)
         pos = state.get("node_positions", {})
@@ -167,7 +168,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
     def _dispatch(self, tool: str, params: dict):
         if tool == "transition_graph_data":
             return self._compute_tm_raw(
-                values=params.get("values", self.values),
+                edge_weight=params.get("edge_weight", self.edge_weight),
                 path_id_col=params.get("path_id_col") or self.path_id_col or None,
                 diff=_parse_diff(params.get("diff")),
             )
@@ -183,7 +184,7 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         try:
             diff_list = _parse_diff(self.diff)
             result = self._compute_tm_raw(
-                values=self.values,
+                edge_weight=self.edge_weight,
                 path_id_col=self.path_id_col or None,
                 diff=diff_list,
             )
@@ -213,9 +214,9 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         finally:
             self.is_loading = False
 
-    def _compute_tm_raw(self, values: str, path_id_col=None, diff=None) -> dict:
+    def _compute_tm_raw(self, edge_weight: str, path_id_col=None, diff=None) -> dict:
         tm = self._eventstream.transition_graph_data(
-            values=values, path_id_col=path_id_col, diff=diff,
+            edge_weight=edge_weight, path_id_col=path_id_col, diff=diff,
         )
         if diff is not None:
             tm, tm1, tm2 = tm

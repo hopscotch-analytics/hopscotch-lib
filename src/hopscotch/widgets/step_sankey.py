@@ -8,7 +8,8 @@ import traitlets
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
 
-from hopscotch.widgets._esm import _get_esm  # noqa: E402
+from hopscotch.widgets._esm import _get_esm   # noqa: E402
+from hopscotch.widgets._utils import parse_diff as _parse_diff
 
 
 class StepSankeyWidget(anywidget.AnyWidget):
@@ -197,18 +198,6 @@ class StepSankeyWidget(anywidget.AnyWidget):
 
         return {"matrices": matrices, "event_counts": event_counts}
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _parse_diff(raw):
-    if not raw:
-        return None
-    try:
-        parsed = json.loads(raw) if isinstance(raw, str) else list(raw)
-        if isinstance(parsed, list) and len(parsed) == 3:
-            return parsed
-    except Exception:
-        pass
-    return None
 
 
 def _df_to_matrix(df) -> dict:
