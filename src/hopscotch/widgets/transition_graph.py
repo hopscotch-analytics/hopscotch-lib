@@ -242,6 +242,66 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
             return {"result": {}}
 
 
+    # ── HTML export ───────────────────────────────────────────────────────────
+
+    def export_html(self, path: str, title: str = "Transition Graph") -> None:
+        """Export the current graph as a standalone interactive HTML file."""
+        import pathlib, base64
+        data = {
+            "widget_type":    "transition_graph",
+            "result":         json.loads(self.result or "{}"),
+            "edge_weight":    self.edge_weight,
+            "diff":           json.loads(self.diff) if self.diff else None,
+            "event_counts":   json.loads(self.event_counts or "{}"),
+            "event_counts_g1": json.loads(self.event_counts_g1 or "{}"),
+            "event_counts_g2": json.loads(self.event_counts_g2 or "{}"),
+            "node_positions":  json.loads(self.node_positions or "{}"),
+            "event_visibility": json.loads(self.event_visibility or "{}"),
+            "segment_levels":  json.loads(self.segment_levels or "{}"),
+            "height":         self.height,
+            "sidebar_open":   self.sidebar_open,
+        }
+        bundle_path = pathlib.Path(__file__).parent.parent / "static" / "widget-static.js"
+        if not bundle_path.exists():
+            raise FileNotFoundError(
+                f"Static bundle not found at {bundle_path}. "
+                "Run `npm run build` in js/widget/ to generate it."
+            )
+        bundle_js = bundle_path.read_text(encoding="utf-8")
+        data_json  = json.dumps(data, ensure_ascii=False)
+        html = _HTML_TEMPLATE.replace("{{TITLE}}", title) \
+                              .replace("{{DATA_JSON}}", data_json) \
+                              .replace("{{BUNDLE_JS}}", bundle_js)
+        pathlib.Path(path).write_text(html, encoding="utf-8")
+
+
+_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8fafc; display: flex; align-items: center;
+           justify-content: center; min-height: 100vh; }
+    #hopscotch-root { width: 100%; max-width: 1400px; margin: 24px; }
+  </style>
+</head>
+<body>
+  <div id="hopscotch-root"></div>
+  <script>window.__HOPSCOTCH_DATA__ = {{DATA_JSON}};</script>
+  <script>{{BUNDLE_JS}}</script>
+  <script>
+    HopscotchWidget.renderStatic(
+      window.__HOPSCOTCH_DATA__,
+      document.getElementById('hopscotch-root')
+    );
+  </script>
+</body>
+</html>"""
+
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _df_to_list(df) -> list:
