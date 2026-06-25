@@ -246,20 +246,24 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
 
     def export_html(self, path: str, title: str = "Transition Graph") -> None:
         """Export the current graph as a standalone interactive HTML file."""
-        import pathlib, base64
+        import pathlib
+        diff_parsed = json.loads(self.diff) if self.diff else None
         data = {
-            "widget_type":    "transition_graph",
-            "result":         json.loads(self.result or "{}"),
-            "edge_weight":    self.edge_weight,
-            "diff":           json.loads(self.diff) if self.diff else None,
-            "event_counts":   json.loads(self.event_counts or "{}"),
+            "widget_type":     "transition_graph",
+            "result":          json.loads(self.result or "{}"),
+            "edge_weight":     self.edge_weight,
+            "diff":            diff_parsed,
+            "event_counts":    json.loads(self.event_counts or "{}"),
             "event_counts_g1": json.loads(self.event_counts_g1 or "{}"),
             "event_counts_g2": json.loads(self.event_counts_g2 or "{}"),
             "node_positions":  json.loads(self.node_positions or "{}"),
             "event_visibility": json.loads(self.event_visibility or "{}"),
             "segment_levels":  json.loads(self.segment_levels or "{}"),
-            "height":         self.height,
-            "sidebar_open":   self.sidebar_open,
+            "path_cols":       json.loads(self.path_cols or "[]"),
+            "path_id_col":     self.path_id_col or "",
+            "height":          self.height,
+            # Sidebar requires Python to recompute — hide it in static mode
+            "sidebar_open":    False,
         }
         bundle_path = pathlib.Path(__file__).parent.parent / "static" / "widget-static.js"
         if not bundle_path.exists():
