@@ -136,6 +136,7 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         title: str = "Transition Graph",
         edge_weight: str = "proba_out",
         diff: list | None = None,
+        analysis: str | None = None,
     ) -> str:
         """
         Render the transition graph as a standalone interactive HTML file.
@@ -149,9 +150,15 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         path:
             Destination file path. If None, a temp file is created.
         title:
-            Title shown in the browser tab.
+            Title shown in the browser tab and as the report heading.
         edge_weight / diff:
             Same as transition_graph_data.
+        analysis:
+            Your written analysis of the graph. Wrap event names in square
+            brackets to make them clickable links that focus the node, e.g.:
+            "The biggest drop-off is at [basket] (78% of users leave here).
+            Users who reach [purchase] typically came via [view]."
+            Supports basic markdown: **bold**, *italic*, bullet lists (- item).
         """
         if path is None:
             tmp = tempfile.NamedTemporaryFile(
@@ -161,7 +168,7 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
             tmp.close()
 
         widget = stream.transition_graph(edge_weight=edge_weight, diff=diff)
-        widget.export_html(path, title=title)
+        widget.export_html(path, title=title, analysis=analysis)
         return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title})
 
     return mcp
@@ -205,7 +212,12 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         lines.append(f"Key metrics: {descs}")
     lines += [
         "",
-        "When you find an insight, call export_html() so the user can see the",
-        "interactive graph. Always include the file path in your response.",
+        "When reporting findings:",
+        "- Wrap event names in [square brackets] when mentioning them — e.g. [basket], [purchase].",
+        "- Call export_html() with your full analysis text in the 'analysis' parameter.",
+        "  In the analysis text, [event_name] references become clickable links that",
+        "  focus the node in the interactive graph.",
+        "- Always tell the user the file path so they can open it.",
+        "- In your chat response, also wrap key event names in [brackets] for clarity.",
     ]
     return "\n".join(lines)

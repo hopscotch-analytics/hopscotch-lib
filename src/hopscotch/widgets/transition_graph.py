@@ -244,8 +244,26 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
 
     # ── HTML export ───────────────────────────────────────────────────────────
 
-    def export_html(self, path: str, title: str = "Transition Graph") -> None:
-        """Export the current graph as a standalone interactive HTML file."""
+    def export_html(
+        self,
+        path: str,
+        title: str = "Transition Graph",
+        analysis: str | None = None,
+    ) -> None:
+        """
+        Export the current graph as a standalone interactive HTML file.
+
+        Parameters
+        ----------
+        path:
+            Destination file path.
+        title:
+            Title shown in the browser tab.
+        analysis:
+            Optional analysis text. Wrap event names in square brackets to make
+            them clickable, e.g. ``"Drop-off at [basket]: 78% of users leave here."``.
+            Supports basic markdown (bold, italic, bullet lists).
+        """
         import pathlib
         diff_parsed = json.loads(self.diff) if self.diff else None
         data = {
@@ -271,12 +289,36 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
                 f"Static bundle not found at {bundle_path}. "
                 "Run `npm run build` in js/widget/ to generate it."
             )
-        bundle_js = bundle_path.read_text(encoding="utf-8")
+        bundle_js  = bundle_path.read_text(encoding="utf-8")
         data_json  = json.dumps(data, ensure_ascii=False)
-        html = _HTML_TEMPLATE.replace("{{TITLE}}", title) \
-                              .replace("{{DATA_JSON}}", data_json) \
-                              .replace("{{BUNDLE_JS}}", bundle_js)
+        analysis_html = _render_analysis(analysis) if analysis else ""
+        template = _HTML_TEMPLATE_ANALYSIS if analysis else _HTML_TEMPLATE
+        html = (template
+                .replace("{{TITLE}}",         title)
+                .replace("{{DATA_JSON}}",      data_json)
+                .replace("{{BUNDLE_JS}}",      bundle_js)
+                .replace("{{ANALYSIS_HTML}}", analysis_html))
         pathlib.Path(path).write_text(html, encoding="utf-8")
+
+
+def _render_analysis(text: str) -> str:
+    """Convert analysis text to HTML. [event_name] → clickable focus link."""
+    import re, html as _html
+    # Escape HTML first, then restore our markers
+    safe = _html.escape(text)
+    # [event_name] → clickable link that focuses node
+    safe = re.sub(
+        r"\[([^\]]+)\]",
+        r'<a href="#\1" class="node-link" onclick="focusNode(this)" data-node="\1">\1</a>',
+        safe,
+    )
+    # Basic markdown: **bold**, *italic*, newlines, bullet lists
+    safe = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", safe)
+    safe = re.sub(r"\*(.+?)\*", r"<em>\1</em>", safe)
+    safe = re.sub(r"^[-*] (.+)$", r"<li>\1</li>", safe, flags=re.MULTILINE)
+    safe = re.sub(r"(<li>.*</li>)", r"<ul>\1</ul>", safe, flags=re.DOTALL)
+    safe = safe.replace("\n\n", "</p><p>").replace("\n", "<br>")
+    return f"<p>{safe}</p>"
 
 
 _HTML_TEMPLATE = """<!DOCTYPE html>
@@ -301,6 +343,55 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       window.__HOPSCOTCH_DATA__,
       document.getElementById('hopscotch-root')
     );
+  </script>
+</body>
+</html>"""
+
+_HTML_TEMPLATE_ANALYSIS = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8fafc; display: flex; height: 100vh; overflow: hidden;
+           font-family: system-ui, -apple-system, sans-serif; }
+    #graph-pane  { flex: 1; min-width: 0; }
+    #analysis-pane { width: 360px; min-width: 280px; background: #fff;
+                     border-left: 1px solid #e5e7eb; display: flex;
+                     flex-direction: column; overflow: hidden; }
+    #analysis-header { padding: 16px 20px 12px; border-bottom: 1px solid #e5e7eb;
+                       font-size: 13px; font-weight: 600; color: #111827; flex-shrink: 0; }
+    #analysis-body { padding: 16px 20px; overflow-y: auto; flex: 1;
+                     font-size: 13px; line-height: 1.7; color: #374151; }
+    #analysis-body p   { margin-bottom: 12px; }
+    #analysis-body ul  { margin: 8px 0 12px 16px; }
+    #analysis-body li  { margin-bottom: 4px; }
+    #analysis-body strong { color: #111827; font-weight: 600; }
+    a.node-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
+    a.node-link:hover { color: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div id="graph-pane">
+    <div id="hopscotch-root" style="height:100vh"></div>
+  </div>
+  <div id="analysis-pane">
+    <div id="analysis-header">{{TITLE}}</div>
+    <div id="analysis-body">{{ANALYSIS_HTML}}</div>
+  </div>
+  <script>window.__HOPSCOTCH_DATA__ = {{DATA_JSON}};</script>
+  <script>{{BUNDLE_JS}}</script>
+  <script>
+    HopscotchWidget.renderStatic(
+      window.__HOPSCOTCH_DATA__,
+      document.getElementById('hopscotch-root')
+    );
+    function focusNode(link) {
+      var name = link.dataset.node;
+      HopscotchWidget.focusNode(name, document.getElementById('hopscotch-root'));
+    }
   </script>
 </body>
 </html>"""
