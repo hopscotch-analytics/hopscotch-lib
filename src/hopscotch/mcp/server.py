@@ -78,12 +78,106 @@ def _build_server(
     # reset by export_report.
     _pending: list[dict] = []
 
+    # Active stream — starts as the original, replaced by update_base_stream.
+    # Use a list so nested functions can rebind it.
+    _active: list = [stream]
+
+    @mcp.tool()
+    def update_base_stream(preprocessors: list) -> str:
+        """
+        Apply preprocessing to the original eventstream and set it as the active
+        base stream for the session. All subsequent add_* calls will use this stream.
+
+        Call this only when the user explicitly wants to change the analysis baseline
+        (e.g. "filter short paths and analyse"). Always confirm with the user before
+        calling — it replaces the current context.
+
+        Always applies to the ORIGINAL stream from serve(), not the current active one,
+        so repeated calls never stack filters accidentally.
+
+        Parameters
+        ----------
+        preprocessors:
+            Ordered list of preprocessing steps. Each step is a dict with "type" and
+            step-specific arguments. Supported types:
+
+            {"type": "collapse_events", "repetitive": true}
+                Collapse consecutive identical events.
+
+            {"type": "filter_paths", "op": ">", "metric": "length", "value": 5}
+                Keep paths matching an AST condition.
+                op: ">" | ">=" | "<" | "<=" | "=" | "in" | "not in"
+                metric: "length" | "duration" | "has" | "event_count" | "matches" |
+                        "time_between" | "active_days"
+                value: number, bool, or list depending on metric
+                metric_args: optional dict (required for has/event_count/matches/time_between)
+                Examples:
+                  keep paths with purchase:
+                    {"op": "=", "metric": "has", "value": true,
+                     "metric_args": {"events": "purchase"}}
+                  keep paths longer than 5 steps:
+                    {"op": ">", "metric": "length", "value": 5}
+
+            {"type": "filter_events", "column": "platform", "values": ["mobile"]}
+                Keep only events where column is in values.
+
+            {"type": "truncate_paths", "left": "login", "right": "purchase"}
+                Trim each path to the window between two anchor events.
+
+            {"type": "rename_events", "mapping": {"old_name": "new_name"}}
+                Rename events.
+
+            {"type": "collapse_events", "event_groups": {"browse": ["catalog", "search"]}}
+                Merge event groups into a single representative event.
+
+            {"type": "sample_paths", "sample_size": 1000, "random_state": 42}
+                Random sample of paths.
+
+        Returns
+        -------
+        JSON with updated stream stats: n_paths, n_events_total, events list.
+        """
+        try:
+            new_stream = _apply_preprocessors(stream, preprocessors)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+        _active[0] = new_stream
+        s = new_stream.schema
+        df = new_stream.df
+        return json.dumps({
+            "status":         "base stream updated",
+            "n_paths":        int(df[s.path_col].nunique()),
+            "n_events_total": len(df),
+            "events":         sorted(df[s.event_col].astype(str).unique().tolist()),
+        }, ensure_ascii=False)
+
+    @mcp.tool()
+    def reset_base_stream() -> str:
+        """
+        Reset the active stream to the original eventstream passed to serve().
+        Use this when the user wants to start a new analysis branch from scratch
+        or undo all preprocessing.
+
+        Returns updated stream stats.
+        """
+        _active[0] = stream
+        s = stream.schema
+        df = stream.df
+        return json.dumps({
+            "status":         "base stream reset to original",
+            "n_paths":        int(df[s.path_col].nunique()),
+            "n_events_total": len(df),
+            "events":         sorted(df[s.event_col].astype(str).unique().tolist()),
+        }, ensure_ascii=False)
+
     @mcp.tool()
     def describe() -> str:
-        """Return schema, event list, unique path counts and available segments."""
-        s = stream.schema
+        """Return schema, event list, unique path counts and available segments.
+        Reflects the current active stream (after any update_base_stream calls)."""
+        cur = _active[0]
+        s = cur.schema
         ec, pc = s.event_col, s.path_col
-        df = stream.df
+        df = cur.df
         result = {
             "n_paths":        int(df[pc].nunique()),
             "n_events_total": len(df),
@@ -105,6 +199,7 @@ def _build_server(
         edge_weight: str = "proba_out",
         diff: list | None = None,
         path_id_col: str | None = None,
+        local_preprocessors: list | None = None,
     ) -> str:
         """
         Compute a transition graph and register it as a tab in the pending report.
@@ -130,9 +225,16 @@ def _build_server(
         -------
         JSON with tab_id, events list, values matrix (and group1/group2 in diff mode).
         Use tab_id to reference this tab in the analysis text as [label:event].
+
+        local_preprocessors:
+            Optional one-off preprocessing applied on top of the base stream for
+            this visualisation only. Same format as update_base_stream preprocessors.
+            Use sparingly — prefer update_base_stream when the same preprocessing
+            applies to multiple visualisations.
         """
-        widget = stream.transition_graph(edge_weight=edge_weight, diff=diff,
-                                         path_id_col=path_id_col or None)
+        src = _apply_preprocessors(_active[0], local_preprocessors or [])
+        widget = src.transition_graph(edge_weight=edge_weight, diff=diff,
+                                      path_id_col=path_id_col or None)
         if widget.error:
             return json.dumps({"error": widget.error, "label": label})
         data = {
@@ -174,6 +276,7 @@ def _build_server(
         diff: list | None = None,
         path_pattern: str | None = None,
         path_id_col: str | None = None,
+        local_preprocessors: list | None = None,
     ) -> str:
         """
         Compute a step matrix and register it as a tab in the pending report.
@@ -197,8 +300,11 @@ def _build_server(
         Returns
         -------
         JSON with tab_id, matrices list, event_counts.
+
+        local_preprocessors: same as in add_transition_graph.
         """
-        widget = stream.step_matrix(
+        src = _apply_preprocessors(_active[0], local_preprocessors or [])
+        widget = src.step_matrix(
             max_steps=max_steps, diff=diff,
             path_id_col=path_id_col or None,
             path_pattern=path_pattern or None,
@@ -236,6 +342,7 @@ def _build_server(
         segment_col: str,
         metrics_config: list | None = None,
         path_id_col: str | None = None,
+        local_preprocessors: list | None = None,
     ) -> str:
         """
         Compute a segment overview and register it as a tab in the pending report.
@@ -293,8 +400,11 @@ def _build_server(
         Returns
         -------
         JSON with tab_id, metrics list, segments list, values matrix.
+
+        local_preprocessors: same as in add_transition_graph.
         """
-        widget = stream.segment_overview(
+        src = _apply_preprocessors(_active[0], local_preprocessors or [])
+        widget = src.segment_overview(
             segment_col=segment_col,
             metrics_config=metrics_config or [],
             path_id_col=path_id_col or None,
@@ -375,6 +485,84 @@ def _build_server(
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+def _apply_preprocessors(stream: Any, preprocessors: list) -> Any:
+    """Apply an ordered list of preprocessing steps to an Eventstream."""
+    for step in preprocessors:
+        t = step.get("type", "")
+        if t == "collapse_events":
+            stream = stream.collapse_events(
+                repetitive=step.get("repetitive"),
+                event_groups=step.get("event_groups"),
+            )
+        elif t == "filter_paths":
+            condition = {k: v for k, v in step.items() if k not in ("type", "path_id_col")}
+            stream = stream.filter_paths(condition, path_id_col=step.get("path_id_col"))
+        elif t == "filter_events":
+            by_col = {k: v for k, v in step.items() if k not in ("type",)}
+            stream = stream.filter_events(by_column=by_col)
+        elif t == "truncate_paths":
+            stream = stream.truncate_paths(
+                left=step["left"], right=step["right"],
+                path_id_col=step.get("path_id_col"),
+            )
+        elif t == "rename_events":
+            stream = stream.rename_events(mapping=step["mapping"])
+        elif t == "edit_events":
+            stream = stream.edit_events(
+                rename=step.get("rename"), delete=step.get("delete"),
+            )
+        elif t == "add_events":
+            stream = stream.add_events(
+                new_event_name=step["new_event_name"],
+                source_events=step.get("source_events"),
+                sql=step.get("sql"),
+                churn=step.get("churn"),
+            )
+        elif t == "add_segment":
+            stream = stream.add_segment(
+                name=step["name"],
+                values=step.get("values"),
+                sql=step.get("sql"),
+            )
+        elif t == "drop_segment":
+            stream = stream.drop_segment(name=step["name"])
+        elif t == "add_clusters":
+            stream = stream.add_clusters(
+                segment_name=step["segment_name"],
+                features=step["features"],
+                method=step.get("method", "kmeans"),
+                n_clusters=step.get("n_clusters"),
+                path_id_col=step.get("path_id_col"),
+            )
+        elif t == "url_events":
+            stream = stream.url_events(
+                column=step["column"],
+                nodes=step["nodes"],
+                strip_host=step.get("strip_host", True),
+                strip_cgi=step.get("strip_cgi", True),
+            )
+        elif t == "sample_paths":
+            stream = stream.sample_paths(
+                sample_size=step["sample_size"],
+                random_state=step.get("random_state"),
+            )
+        elif t == "split_sessions":
+            stream = stream.split_sessions(
+                timeout=step.get("timeout"),
+                session_col=step.get("session_col", "session_id"),
+                session_index_col=step.get("session_index_col", "session_index"),
+            )
+        else:
+            raise ValueError(
+                f"Unknown preprocessor type: {t!r}. "
+                "Supported: collapse_events, filter_paths, filter_events, "
+                "truncate_paths, rename_events, edit_events, add_events, "
+                "add_segment, drop_segment, add_clusters, url_events, "
+                "sample_paths, split_sessions."
+            )
+    return stream
+
+
 def _df_to_matrix(df: Any) -> dict:
     return {
         "events":  df.index.tolist(),
@@ -423,7 +611,11 @@ def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str
         "",
         "## Workflow",
         "1. Call describe() to understand the data.",
-        "2. Call add_transition_graph(), add_step_matrix(), and/or add_segment_overview() one or more times.",
+        "2. Optionally call update_base_stream(preprocessors) to filter/transform the stream",
+        "   for the entire analysis session (e.g. remove noise events, filter short paths).",
+        "   Ask the user for confirmation before calling — it resets the analysis context.",
+        "   All subsequent add_* calls use this preprocessed stream automatically.",
+        "3. Call add_transition_graph(), add_step_matrix(), and/or add_segment_overview() one or more times.",
         "   Each call computes a visualisation, returns its data for analysis,",
         "   and registers it as a tab (tab-0, tab-1, …) in the pending report.",
         "   You can add multiple visualisations of the same type with different",
@@ -446,6 +638,19 @@ def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str
         "- Use cell links [tab:event@step] when pointing to a specific step in the matrix.",
         "- Tab labels must not contain colons.",
         "- Always call export_report() and tell the user the file path.",
+        "",
+        "## Preprocessing",
+        "- update_base_stream(preprocessors): changes the baseline for the whole session.",
+        "  Use when the user says 'filter X and analyse', 'remove noise', 'work with Y'.",
+        "  ALWAYS ask for confirmation first: 'This will replace the current stream. Proceed?'",
+        "  After confirmation, call it ONCE — all add_* tools will use the new stream.",
+        "  Calling it again starts a new analysis branch from the original stream.",
+        "- local_preprocessors in add_*: one-off preprocessing for a single visualisation.",
+        "  Use only when the preprocessing is specific to that visualisation and would NOT",
+        "  make sense applied globally (e.g. 'show a graph with only mobile users' while",
+        "  the rest of the analysis remains on all users).",
+        "  Do NOT repeat the same local_preprocessors across multiple add_* calls —",
+        "  use update_base_stream instead.",
         f"- Save reports to the notebook directory: {notebook_dir}" if notebook_dir else
         "- Save reports to a convenient local path.",
     ]
