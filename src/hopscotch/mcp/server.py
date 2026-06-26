@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import tempfile
 import threading
 from typing import Any
@@ -133,6 +134,26 @@ def _build_server(
             {"type": "sample_paths", "sample_size": 1000, "random_state": 42}
                 Random sample of paths.
 
+            {"type": "add_segment", "name": "funnel", "funnel_events": ["A", "B"]}
+                Create an N+1 level funnel segment.
+                Levels named after the last event reached in sequence:
+                  'out_of_funnel' — never reached A
+                  'A'             — reached A but not B
+                  'B'             — completed the funnel
+                Use diff=['funnel', 'A', 'B'] to compare dropped vs converted.
+                For a 3-step funnel ["A","B","C"] levels are: out_of_funnel, A, B, C.
+
+            {"type": "add_segment", "name": "period",
+             "values": [["timestamp", "<", "2024-01-20", "normal"],
+                        ["timestamp", ">", "2024-01-22", "normal"],
+                        ["anomaly"]]}
+                Label paths by time window. Each entry is [column, op, value, label];
+                the last entry is the ELSE fallback.
+                Use timestamp_col from describe() as column name.
+
+            {"type": "add_segment", "name": "...", "sql": "CASE WHEN ... END"}
+                Derive a segment column from a SQL expression (for complex conditions).
+
         Returns
         -------
         JSON with updated stream stats: n_paths, n_events_total, events list.
@@ -178,6 +199,7 @@ def _build_server(
         s = cur.schema
         ec, pc = s.event_col, s.path_col
         df = cur.df
+        ts_col = s.timestamp
         result = {
             "n_paths":        int(df[pc].nunique()),
             "n_events_total": len(df),
@@ -185,6 +207,11 @@ def _build_server(
             "path_col":       pc,
             "path_cols":      s.path_cols,
             "segment_cols":   s.segment_cols,
+            "timestamp_col":  ts_col,
+            "date_range":     {
+                "min": str(df[ts_col].min())[:10],
+                "max": str(df[ts_col].max())[:10],
+            },
             "events":         sorted(df[ec].astype(str).unique().tolist()),
         }
         if context.get("events"):
@@ -523,6 +550,8 @@ def _apply_preprocessors(stream: Any, preprocessors: list) -> Any:
                 name=step["name"],
                 values=step.get("values"),
                 sql=step.get("sql"),
+                funnel_events=step.get("funnel_events"),
+                path_id_col=step.get("path_id_col"),
             )
         elif t == "drop_segment":
             stream = stream.drop_segment(name=step["name"])
@@ -651,6 +680,57 @@ def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str
         "  the rest of the analysis remains on all users).",
         "  Do NOT repeat the same local_preprocessors across multiple add_* calls —",
         "  use update_base_stream instead.",
+        "",
+        "## Analysis patterns",
+        "",
+        "### Temporal anomaly — spike, drop, incident, unusual period",
+        "Trigger: user asks about a specific date range ('why did X spike on Jan 20-22?',",
+        "  'what happened during those dates?', etc.).",
+        "Do NOT execute Python code. Call update_base_stream (ask user to confirm) with:",
+        "  preprocessors=[{",
+        "    'type': 'add_segment', 'name': 'period',",
+        "    'values': [",
+        "      ['{timestamp_col}', '<',  'YYYY-MM-DD', 'normal'],",
+        "      ['{timestamp_col}', '>',  'YYYY-MM-DD', 'normal'],",
+        "      ['anomaly']",
+        "    ]",
+        "  }]",
+        "  Replace {timestamp_col} with the value from describe() ('timestamp_col' field).",
+        "  The first date is the start of the anomaly window, the second is the end.",
+        "  Values format: each entry is [column, op, value, segment_label];",
+        "  the last entry ['anomaly'] is the ELSE fallback.",
+        "Then use diff=['period', 'anomaly', 'normal'] in add_transition_graph / add_step_matrix.",
+        "Also: add_segment_overview(segment_col='period') to compare all KPIs.",
+        "",
+        "### Segment comparison (e.g. new vs loyal, mobile vs desktop)",
+        "The segment column is already in the stream — no preprocessing needed.",
+        "Use diff=['segment_col', 'val1', 'val2'] directly in add_transition_graph / add_step_matrix.",
+        "",
+        "### Funnel / path analysis (conversion from event A to event B)",
+        "Use add_step_matrix with path_pattern='A->.*->B' to focus on paths",
+        "that pass through both anchor events.",
+        "",
+        "### Conversion drop-off analysis (why is conversion from A to B dropping?)",
+        "Use add_segment with funnel_events to create an N+1 level funnel segment.",
+        "Each level is named after the LAST funnel event reached (in sequential order).",
+        "Example for a 2-step funnel [add_to_cart, purchase]:",
+        "  preprocessors=[{",
+        "    'type': 'add_segment', 'name': 'funnel',",
+        "    'funnel_events': ['add_to_cart', 'purchase']",
+        "  }]",
+        "  → segment levels: 'out_of_funnel', 'add_to_cart', 'purchase'",
+        "  Then: diff=['funnel', 'add_to_cart', 'purchase']  (compare dropped vs converted)",
+        "For a 3-step funnel [add_to_cart, checkout, purchase]:",
+        "  funnel_events: ['add_to_cart', 'checkout', 'purchase']",
+        "  → levels: 'out_of_funnel', 'add_to_cart', 'checkout', 'purchase'",
+        "  To analyse checkout→purchase drop-off: diff=['funnel', 'checkout', 'purchase']",
+        "  To analyse add_to_cart→checkout drop-off: diff=['funnel', 'add_to_cart', 'checkout']",
+        "",
+        "### Noise removal before any analysis",
+        "Call update_base_stream first (ask user to confirm) with one or more of:",
+        "  collapse_events repetitive=True  — removes self-loops",
+        "  filter_paths length > N          — removes very short sessions",
+        "  filter_events column/values      — removes specific noise events",
         f"- Save reports to the notebook directory: {notebook_dir}" if notebook_dir else
         "- Save reports to a convenient local path.",
     ]

@@ -241,9 +241,13 @@ class Eventstream:
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_add_segment")
-    def add_segment(self, name: str, values=None, func=None, sql=None) -> "Eventstream":
+    def add_segment(self, name: str, values=None, func=None, sql=None,
+                    funnel_events=None, path_id_col=None) -> "Eventstream":
         from hopscotch.data_processors.add_segment import AddSegment
-        new_df, new_schema = AddSegment(name, values=values, func=func, sql=sql).apply(self._df, self.schema)
+        new_df, new_schema = AddSegment(
+            name, values=values, func=func, sql=sql,
+            funnel_events=funnel_events, path_id_col=path_id_col,
+        ).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_collapse_events")
