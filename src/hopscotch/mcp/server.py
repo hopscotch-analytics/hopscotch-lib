@@ -501,9 +501,9 @@ def _build_server(
             tmp.close()
 
         widgets = list(_pending)
-        _pending.clear()
 
         write_report_html(path, title, widgets, analysis)
+        _pending.clear()  # only clear after successful write
         return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title,
                            "tabs": [w["label"] for w in widgets]})
 
