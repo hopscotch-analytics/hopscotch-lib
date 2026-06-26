@@ -282,8 +282,10 @@ def _df_to_list(df: Any) -> list:
     for _, row in df.iterrows():
         cells = []
         for v in row:
-            if isinstance(v, pd.Timedelta):
-                cells.append(None if pd.isna(v) else v.total_seconds())
+            if pd.isna(v):
+                cells.append(None)
+            elif isinstance(v, pd.Timedelta):
+                cells.append(v.total_seconds())
             elif hasattr(v, "__float__"):
                 cells.append(float(v))
             else:
