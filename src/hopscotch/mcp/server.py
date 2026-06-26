@@ -127,6 +127,8 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         """
         widget = stream.transition_graph(edge_weight=edge_weight, diff=diff,
                                          path_id_col=path_id_col or None)
+        if widget.error:
+            return json.dumps({"error": widget.error, "label": label})
         data = {
             "widget_type":      "transition_graph",
             "result":           json.loads(widget.result or "{}"),
@@ -195,6 +197,8 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
             path_id_col=path_id_col or None,
             path_pattern=path_pattern or None,
         )
+        if widget.error:
+            return json.dumps({"error": widget.error, "label": label})
         data = {
             "widget_type":    "step_matrix",
             "result":         json.loads(widget.result or "{}"),
@@ -289,6 +293,8 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
             metrics_config=metrics_config or [],
             path_id_col=path_id_col or None,
         )
+        if widget.error:
+            return json.dumps({"error": widget.error, "label": label})
         data = {
             "widget_type":    "segment_overview",
             "result":         json.loads(widget.result or "{}"),
@@ -422,11 +428,14 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         "## Analysis text",
         "- Use markdown: # Heading, ## Sub, **bold**, *italic*, - list, | table |.",
         "- Reference widgets using [tab_label:ref] syntax:",
-        "    [Overall Flow:basket]          → focus node 'basket' in transition graph tab",
-        "    [Overall Flow:basket->purchase] → animate edge basket→purchase (marching ants)",
-        "    [Purchase Funnel:basket@4]      → scroll to cell basket at step 4 in step matrix",
-        "                                      (step_window expands automatically if needed)",
-        "    [basket]                        → focus in whichever tab is currently active",
+        "    [Overall Flow:basket]               → focus node 'basket' in transition graph",
+        "    [Overall Flow:basket->purchase]      → animate edge basket→purchase (marching ants)",
+        "    [Purchase Funnel:basket@4]           → scroll to cell basket at step 4 in step matrix",
+        "                                           (step_window expands automatically if needed)",
+        "    [Platform Breakdown:mobile]            → highlight 'mobile' column in segment_overview",
+        "                                             (displayed as 'platform: mobile' in report)",
+        "    [Platform Breakdown:has_purchase@mobile] → highlight specific cell: metric@segment",
+        "    [basket]                             → focus in whichever tab is currently active",
         "- Prefer edge links [tab:src->tgt] over node links when discussing transitions.",
         "- Use cell links [tab:event@step] when pointing to a specific step in the matrix.",
         "- Tab labels must not contain colons.",

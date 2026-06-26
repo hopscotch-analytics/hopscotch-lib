@@ -31,7 +31,7 @@ class TestFilterPathsAST:
         ast_condition = {
             "op": "and",
             "args": [
-                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}},
+                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}},
                 {"op": "=", "metric": "has", "value": True, "metric_args": {"events": "promo_view"}},
                 {
                     "op": "not",
@@ -61,13 +61,13 @@ class TestFilterPathsAST:
 
     def test__ast_condition_no_matches_raises_empty_result_error(self) -> None:
         stream = build_stream()
-        ast_condition = {"op": ">", "metric": "event_count", "value": 10, "metric_args": {"event": "purchase"}}
+        ast_condition = {"op": ">", "metric": "event_count", "value": 10, "metric_args": {"events": "purchase"}}
         with pytest.raises(EmptyEventstreamError):
             _ = stream.filter_paths(ast_condition=ast_condition)
 
     def test__ast_condition_in_numeric(self) -> None:
         stream = build_stream()
-        ast_condition = {"op": "in", "metric": "event_count", "value": [2], "metric_args": {"event": "purchase"}}
+        ast_condition = {"op": "in", "metric": "event_count", "value": [2], "metric_args": {"events": "purchase"}}
         res = stream.filter_paths(ast_condition=ast_condition)
 
         expected = stream.filter_events(by_column={"column": "user_id", "values": ["user_2"]})
@@ -133,7 +133,7 @@ class TestFilterPathsAST:
         schema = {"path_cols": ["user_id", "session_id"], "event_cols": ["event"], "timestamp": "timestamp"}
         stream = Eventstream(df, schema)
 
-        ast_condition = {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}}
+        ast_condition = {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}}
         res = stream.filter_paths(ast_condition=ast_condition, path_id_col="session_id")
 
         expected = stream.filter_events(by_column={"column": "session_id", "values": ["sess_2"]})
@@ -176,7 +176,7 @@ class TestFilterPathsAST:
         ast_condition = {
             "op": "and",
             "args": [
-                {"op": ">", "metric": "event_count", "value": 0, "metric_args": {"event": "purchase"}},
+                {"op": ">", "metric": "event_count", "value": 0, "metric_args": {"events": "purchase"}},
                 {"op": "=", "metric": "has", "value": True, "metric_args": {"events": ["promo_view", "purchase"]}},
             ],
         }
@@ -194,7 +194,7 @@ class TestFilterPathsAST:
             "op": "and",
             "args": [
                 {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "promo_view->.*->purchase"}},
-                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}},
+                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}},
             ],
         }
 
@@ -257,7 +257,7 @@ class TestFilterPathsAST:
                     "metric_args": {"segment_name": "country", "segment_value": "US", "mode": "any"},
                     "value": 1,
                 },
-                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}},
+                {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}},
             ],
         }
         res = stream.filter_paths(ast_condition=ast_condition)

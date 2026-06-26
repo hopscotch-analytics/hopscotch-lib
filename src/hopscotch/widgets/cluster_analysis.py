@@ -82,7 +82,7 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
         if _feat is None:
             try:
                 all_events = json.loads(self.event_list)
-                _feat = [{"metric": "event_count", "metric_args": {"event": all_events}}]
+                _feat = [{"metric": "event_count", "metric_args": {"events": all_events}}]
             except Exception:
                 _feat = []
         self.features       = json.dumps(_feat) if isinstance(_feat, list) else (_feat or "[]")
@@ -96,7 +96,7 @@ class ClusterAnalysisWidget(anywidget.AnyWidget):
         if _mc is None:
             try:
                 all_events = json.loads(self.event_list)
-                _mc = [{"metric": "event_count", "metric_args": {"event": all_events}, "agg": "mean"}]
+                _mc = [{"metric": "event_count", "metric_args": {"events": all_events}, "agg": "mean"}]
             except Exception:
                 _mc = []
         self.metrics_config = json.dumps(_mc) if isinstance(_mc, list) else (_mc or "[]")

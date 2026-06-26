@@ -40,8 +40,8 @@ class FilterPaths(DataProcessor):
             - metric="length", metric_args=None -> ["length"]
             - metric="has", metric_args={"events": "purchase"} -> ["has_purchase"]
             - metric="has", metric_args={"events": ["logout", "cancellation"]} -> ["has_logout", "has_cancellation"]
-            - metric="event_count", metric_args={"event": "purchase"} -> ["event_count_purchase"]
-            - metric="event_count", metric_args={"event": ["view", "purchase"]} -> ["event_count_view", "event_count_purchase"]
+            - metric="event_count", metric_args={"events": "purchase"} -> ["event_count_purchase"]
+            - metric="event_count", metric_args={"events": ["view", "purchase"]} -> ["event_count_view", "event_count_purchase"]
             - metric="time_between", metric_args={"event_from": "login", "event_to": "purchase"}
               -> ["time_from_login_to_purchase"]
             - metric="active_days", metric_args={"active_events": ["login", "purchase"]}
@@ -57,7 +57,7 @@ class FilterPaths(DataProcessor):
             return [f"has_{events}"]
 
         elif metric == "event_count":
-            event = metric_args.get("event")
+            event = metric_args.get("events")
             if isinstance(event, list):
                 return [f"event_count_{e}" for e in event]
             return [f"event_count_{event}"]

@@ -47,7 +47,16 @@ def write_report_html(
             "Run `npm run build` in js/widget/ to generate it."
         )
     bundle_js = _BUNDLE_PATH.read_text(encoding="utf-8")
-    label_map = {w["label"]: f"tab-{i}" for i, w in enumerate(widgets)}
+    # Build enriched map: label → {tab_id, widget_type, segment_col}
+    # segment_col is used by render_analysis to format segment_overview links
+    label_map = {
+        w["label"]: {
+            "tab_id":      f"tab-{i}",
+            "widget_type": w["data"].get("widget_type", ""),
+            "segment_col": w["data"].get("segment_col", ""),
+        }
+        for i, w in enumerate(widgets)
+    }
     widgets_json = json.dumps(widgets, ensure_ascii=False)
     analysis_html = render_analysis(analysis, label_map=label_map) if analysis else ""
     html = (_HTML_TEMPLATE_REPORT
@@ -58,27 +67,51 @@ def write_report_html(
     pathlib.Path(path).write_text(html, encoding="utf-8")
 
 
-def render_analysis(text: str, label_map: dict[str, str] | None = None) -> str:
+def render_analysis(text: str, label_map: dict | None = None) -> str:
     """Convert markdown text to HTML.
 
-    ``[tab_label:event_name]`` → link that activates the tab and focuses the event.
-    ``[event_name]``           → link that focuses the event in the active tab.
+    ``[tab_label:ref]``  → link that activates the tab and focuses ref.
+    ``[ref]``            → link that focuses ref in the active tab.
+
+    For segment_overview tabs, ref is displayed as "segment_col: value".
     """
 
     def _inline(s: str) -> str:
-        # [label:event] — tab-specific link (process first, more specific)
+        # [label:ref] — tab-specific link (process first, more specific)
         if label_map:
             def _tab_link(m: re.Match) -> str:
-                label, event = m.group(1), m.group(2)
-                tab_id = label_map.get(label, "")
-                if not tab_id:
+                label, ref = m.group(1), m.group(2)
+                entry = label_map.get(label)
+                if not entry:
                     return m.group(0)
+                # entry is either a plain tab_id string (legacy) or a metadata dict
+                if isinstance(entry, dict):
+                    tab_id      = entry["tab_id"]
+                    widget_type = entry.get("widget_type", "")
+                    segment_col = entry.get("segment_col", "")
+                else:
+                    tab_id      = entry
+                    widget_type = ""
+                    segment_col = ""
+                # Segment overview links
+                if widget_type == "segment_overview" and segment_col:
+                    at = ref.find("@")
+                    if at != -1:
+                        # metric@segment → "metric(segment_col: segment)"
+                        metric   = ref[:at]
+                        seg_val  = ref[at + 1:]
+                        display  = f"{metric}({_html_mod.escape(segment_col)}: {seg_val})"
+                    else:
+                        # column or row ref
+                        display  = f"{_html_mod.escape(segment_col)}: {ref}"
+                else:
+                    display = ref
                 return (
                     f'<a href="javascript:void(0)" class="node-link"'
                     f' onclick="return focusLink(this)"'
-                    f' data-tab="{tab_id}" data-node="{event}"'
+                    f' data-tab="{tab_id}" data-node="{ref}"'
                     f' title="Open in: {_html_mod.escape(label)}">'
-                    f'{event}</a>'
+                    f'{display}</a>'
                 )
             s = re.sub(r"\[([^:\]]+):([^\]]+)\]", _tab_link, s)
 

@@ -191,7 +191,7 @@ class Eventstream:
             ast_condition = {
                 "op": "and",
                 "args": [
-                    {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"event": "purchase"}},
+                    {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}},
                     {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "registration->.*->purchase"}},
                 ]
             }
