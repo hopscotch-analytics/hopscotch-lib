@@ -158,7 +158,7 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
             brackets to make them clickable links that focus the node, e.g.:
             "The biggest drop-off is at [basket] (78% of users leave here).
             Users who reach [purchase] typically came via [view]."
-            Supports basic markdown: **bold**, *italic*, bullet lists (- item).
+            Supports markdown: **bold**, *italic*, # headings, tables, - lists.
         """
         if path is None:
             tmp = tempfile.NamedTemporaryFile(
@@ -171,10 +171,101 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         widget.export_html(path, title=title, analysis=analysis)
         return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title})
 
+    @mcp.tool()
+    def step_matrix_data(
+        max_steps: int = 10,
+        diff: list | None = None,
+        path_pattern: str | None = None,
+        path_id_col: str | None = None,
+    ) -> str:
+        """
+        Compute a step matrix: for each event, its frequency at each relative
+        step position around an anchor.
+
+        Parameters
+        ----------
+        max_steps:
+            Maximum number of steps before/after anchor to include.
+        diff:
+            Optional diff: [segment_col, value1, value2].
+        path_pattern:
+            Filter to paths matching this pattern, e.g. "add_to_cart->.*->purchase".
+        path_id_col:
+            Override the path ID column.
+
+        Returns
+        -------
+        JSON with matrices list (each has events, columns, values) and event_counts.
+        """
+        raw = stream.step_sankey_data(
+            max_steps=max_steps,
+            diff=diff,
+            path_id_col=path_id_col or None,
+            path_pattern=path_pattern or None,
+        )
+        if diff is not None:
+            diff_sms, sms1, sms2 = raw
+            matrices = [_df_to_matrix(sm) for sm in diff_sms]
+            g1 = [_df_to_matrix(sm) for sm in sms1]
+            g2 = [_df_to_matrix(sm) for sm in sms2]
+            for i, m in enumerate(matrices):
+                m["group1"] = g1[i]
+                m["group2"] = g2[i]
+        else:
+            matrices = [_df_to_matrix(sm) for sm in raw]
+        return json.dumps({"matrices": matrices}, ensure_ascii=False)
+
+    @mcp.tool()
+    def export_step_matrix_html(
+        path: str | None = None,
+        title: str = "Step Matrix",
+        max_steps: int = 10,
+        diff: list | None = None,
+        path_pattern: str | None = None,
+        analysis: str | None = None,
+    ) -> str:
+        """
+        Render the step matrix as a standalone interactive HTML file.
+        Returns the absolute path to the generated file.
+
+        Parameters
+        ----------
+        path:
+            Destination file path. If None, a temp file is created.
+        title:
+            Title shown in the browser tab and as the report heading.
+        max_steps / diff / path_pattern:
+            Same as step_matrix_data.
+        analysis:
+            Your written analysis. Wrap event names in [brackets] to make them
+            clickable — they will scroll the matrix to that event row.
+            Supports markdown: **bold**, *italic*, # headings, tables, - lists.
+        """
+        if path is None:
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=".html", delete=False, prefix="hopscotch_"
+            )
+            path = tmp.name
+            tmp.close()
+
+        widget = stream.step_matrix(
+            max_steps=max_steps, diff=diff, path_pattern=path_pattern or None
+        )
+        widget.export_html(path, title=title, analysis=analysis)
+        return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title})
+
     return mcp
 
 
 # ── helpers ────────────────────────────────────────────────────────────────────
+
+def _df_to_matrix(df: Any) -> dict:
+    return {
+        "events":  df.index.tolist(),
+        "columns": [int(c) for c in df.columns.tolist()],
+        "values":  df.values.tolist(),
+    }
+
 
 def _df_to_list(df: Any) -> list:
     rows = []
@@ -212,12 +303,18 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         lines.append(f"Key metrics: {descs}")
     lines += [
         "",
+        "Available tools:",
+        "- describe()                  — stream schema and event list",
+        "- transition_graph_data()     — Markov transition matrix",
+        "- export_html()               — interactive transition graph HTML report",
+        "- step_matrix_data()          — step matrix (event frequency per step position)",
+        "- export_step_matrix_html()   — interactive step matrix HTML report",
+        "",
         "When reporting findings:",
-        "- Wrap event names in [square brackets] when mentioning them — e.g. [basket], [purchase].",
-        "- Call export_html() with your full analysis text in the 'analysis' parameter.",
-        "  In the analysis text, [event_name] references become clickable links that",
-        "  focus the node in the interactive graph.",
-        "- Always tell the user the file path so they can open it.",
-        "- In your chat response, also wrap key event names in [brackets] for clarity.",
+        "- Wrap event names in [square brackets] — e.g. [basket], [purchase].",
+        "- Always call the relevant export_*_html() tool with your analysis text.",
+        "  In the analysis, [event_name] references become clickable links.",
+        "- Tell the user the file path so they can open it.",
+        "- Use markdown in analysis: # headings, **bold**, tables, - bullet lists.",
     ]
     return "\n".join(lines)

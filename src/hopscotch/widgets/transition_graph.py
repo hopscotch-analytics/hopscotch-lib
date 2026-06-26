@@ -7,6 +7,7 @@ import traitlets
 from hopscotch.widgets._esm import _get_esm
 from hopscotch.widgets.cloud_mixin import CloudMixin
 from hopscotch.widgets._utils import parse_diff as _parse_diff
+from hopscotch.widgets._html_export import write_html
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
@@ -262,46 +263,28 @@ class TransitionGraphWidget(CloudMixin, anywidget.AnyWidget):
         analysis:
             Optional analysis text. Wrap event names in square brackets to make
             them clickable, e.g. ``"Drop-off at [basket]: 78% of users leave here."``.
-            Supports basic markdown (bold, italic, bullet lists).
+            Supports basic markdown (bold, italic, bullet lists, tables, headings).
         """
-        import pathlib
-        diff_parsed = json.loads(self.diff) if self.diff else None
         data = {
-            "widget_type":     "transition_graph",
-            "result":          json.loads(self.result or "{}"),
-            "edge_weight":     self.edge_weight,
-            "diff":            diff_parsed,
-            "event_counts":    json.loads(self.event_counts or "{}"),
-            "event_counts_g1": json.loads(self.event_counts_g1 or "{}"),
-            "event_counts_g2": json.loads(self.event_counts_g2 or "{}"),
-            "node_positions":  json.loads(self.node_positions or "{}"),
+            "widget_type":      "transition_graph",
+            "result":           json.loads(self.result or "{}"),
+            "edge_weight":      self.edge_weight,
+            "diff":             json.loads(self.diff) if self.diff else None,
+            "event_counts":     json.loads(self.event_counts or "{}"),
+            "event_counts_g1":  json.loads(self.event_counts_g1 or "{}"),
+            "event_counts_g2":  json.loads(self.event_counts_g2 or "{}"),
+            "node_positions":   json.loads(self.node_positions or "{}"),
             "event_visibility": json.loads(self.event_visibility or "{}"),
-            "segment_levels":  json.loads(self.segment_levels or "{}"),
-            "path_cols":       json.loads(self.path_cols or "[]"),
-            "path_id_col":     self.path_id_col or "",
-            "height":          self.height,
-            # Sidebar requires Python to recompute — hide it in static mode
-            "sidebar_open":    False,
+            "segment_levels":   json.loads(self.segment_levels or "{}"),
+            "path_cols":        json.loads(self.path_cols or "[]"),
+            "path_id_col":      self.path_id_col or "",
+            "height":           self.height,
+            "sidebar_open":     False,
         }
-        bundle_path = pathlib.Path(__file__).parent.parent / "static" / "widget-static.js"
-        if not bundle_path.exists():
-            raise FileNotFoundError(
-                f"Static bundle not found at {bundle_path}. "
-                "Run `npm run build` in js/widget/ to generate it."
-            )
-        bundle_js  = bundle_path.read_text(encoding="utf-8")
-        data_json  = json.dumps(data, ensure_ascii=False)
-        analysis_html = _render_analysis(analysis) if analysis else ""
-        template = _HTML_TEMPLATE_ANALYSIS if analysis else _HTML_TEMPLATE
-        html = (template
-                .replace("{{TITLE}}",         title)
-                .replace("{{DATA_JSON}}",      data_json)
-                .replace("{{BUNDLE_JS}}",      bundle_js)
-                .replace("{{ANALYSIS_HTML}}", analysis_html))
-        pathlib.Path(path).write_text(html, encoding="utf-8")
+        write_html(path, title, "Transition Graph", data, analysis)
 
 
-def _render_analysis(text: str) -> str:
+def _render_analysis(text: str) -> str:  # noqa: F401 — backward compat shim
     """Convert markdown text to HTML. [event] → clickable node focus link."""
     import re, html as _html
 
