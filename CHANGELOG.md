@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-26
+
+### Changed
+- **Step Matrix sort icons** — anchor column header now shows sort icons; event rows sort lexicographically
+
 ## [0.4.0] - 2026-06-24
 
 ### Added

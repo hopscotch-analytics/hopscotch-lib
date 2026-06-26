@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hopscotch-analytics"
-version = "0.4.0"
+version = "0.5.1"
 description = "Clickstream analysis library for Jupyter / Colab / VS Code"
 requires-python = ">=3.11"
 dependencies = [
