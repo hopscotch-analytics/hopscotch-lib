@@ -9,6 +9,7 @@ Usage in a Jupyter notebook:
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import tempfile
 import threading
@@ -44,7 +45,7 @@ def serve(
     port:
         HTTP port for the SSE transport (default 8765).
     """
-    mcp = _build_server(stream, context or {}, port=port)
+    mcp = _build_server(stream, context or {}, port=port, notebook_dir=os.getcwd())
     thread = threading.Thread(
         target=lambda: mcp.run(transport="sse"),
         daemon=True,
@@ -59,12 +60,17 @@ def serve(
 
 # ── server builder ─────────────────────────────────────────────────────────────
 
-def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> FastMCP:
+def _build_server(
+    stream: "Eventstream",
+    context: dict,
+    port: int = 8765,
+    notebook_dir: str = "",
+) -> FastMCP:
     from hopscotch.widgets._html_export import write_report_html
 
     mcp = FastMCP(
         "hopscotch",
-        instructions=_system_instructions(stream, context),
+        instructions=_system_instructions(stream, context, notebook_dir=notebook_dir),
         port=port,
     )
 
@@ -394,7 +400,7 @@ def _df_to_list(df: Any) -> list:
     return rows
 
 
-def _system_instructions(stream: "Eventstream", context: dict) -> str:
+def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str = "") -> str:
     s = stream.schema
     df = stream.df
     n_paths = int(df[s.path_col].nunique())
@@ -440,5 +446,7 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         "- Use cell links [tab:event@step] when pointing to a specific step in the matrix.",
         "- Tab labels must not contain colons.",
         "- Always call export_report() and tell the user the file path.",
+        f"- Save reports to the notebook directory: {notebook_dir}" if notebook_dir else
+        "- Save reports to a convenient local path.",
     ]
     return "\n".join(lines)
