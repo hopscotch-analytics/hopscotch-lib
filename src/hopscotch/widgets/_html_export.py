@@ -9,6 +9,8 @@ import html as _html_mod
 _BUNDLE_PATH = pathlib.Path(__file__).parent.parent / "static" / "widget-static.js"
 
 
+# ── Public API ─────────────────────────────────────────────────────────────────
+
 def write_html(
     path: str,
     title: str,
@@ -16,32 +18,75 @@ def write_html(
     data: dict,
     analysis: str | None = None,
 ) -> None:
+    """Export a single widget as a standalone HTML file."""
+    if analysis is None:
+        _write_bare(path, title, data)
+    else:
+        write_report_html(path, title, [{"label": widget_label, "data": data}], analysis)
+
+
+def write_report_html(
+    path: str,
+    title: str,
+    widgets: list[dict],
+    analysis: str | None = None,
+) -> None:
+    """Export a multi-widget report HTML file.
+
+    Parameters
+    ----------
+    widgets:
+        List of ``{"label": str, "data": dict}`` entries — one per tab.
+    analysis:
+        Markdown text. Use ``[tab_label:event_name]`` to link to a specific tab
+        and focus an event; use ``[event_name]`` to focus in the active tab.
+    """
     if not _BUNDLE_PATH.exists():
         raise FileNotFoundError(
             f"Static bundle not found at {_BUNDLE_PATH}. "
             "Run `npm run build` in js/widget/ to generate it."
         )
     bundle_js = _BUNDLE_PATH.read_text(encoding="utf-8")
-    data_json = json.dumps(data, ensure_ascii=False)
-    analysis_html = render_analysis(analysis) if analysis else ""
-    template = _HTML_TEMPLATE_ANALYSIS if analysis else _HTML_TEMPLATE
-    html = (template
+    label_map = {w["label"]: f"tab-{i}" for i, w in enumerate(widgets)}
+    widgets_json = json.dumps(widgets, ensure_ascii=False)
+    analysis_html = render_analysis(analysis, label_map=label_map) if analysis else ""
+    html = (_HTML_TEMPLATE_REPORT
             .replace("{{TITLE}}",         title)
-            .replace("{{WIDGET_LABEL}}",   widget_label)
-            .replace("{{DATA_JSON}}",      data_json)
+            .replace("{{WIDGETS_JSON}}",   widgets_json)
             .replace("{{BUNDLE_JS}}",      bundle_js)
             .replace("{{ANALYSIS_HTML}}", analysis_html))
     pathlib.Path(path).write_text(html, encoding="utf-8")
 
 
-def render_analysis(text: str) -> str:
-    """Convert markdown text to HTML. [event] → clickable node focus link."""
+def render_analysis(text: str, label_map: dict[str, str] | None = None) -> str:
+    """Convert markdown text to HTML.
+
+    ``[tab_label:event_name]`` → link that activates the tab and focuses the event.
+    ``[event_name]``           → link that focuses the event in the active tab.
+    """
 
     def _inline(s: str) -> str:
+        # [label:event] — tab-specific link (process first, more specific)
+        if label_map:
+            def _tab_link(m: re.Match) -> str:
+                label, event = m.group(1), m.group(2)
+                tab_id = label_map.get(label, "")
+                if not tab_id:
+                    return m.group(0)
+                return (
+                    f'<a href="javascript:void(0)" class="node-link"'
+                    f' onclick="return focusLink(this)"'
+                    f' data-tab="{tab_id}" data-node="{event}"'
+                    f' title="Open in: {_html_mod.escape(label)}">'
+                    f'{event}</a>'
+                )
+            s = re.sub(r"\[([^:\]]+):([^\]]+)\]", _tab_link, s)
+
+        # [event] — focus in active tab
         s = re.sub(
             r"\[([^\]]+)\]",
             r'<a href="javascript:void(0)" class="node-link"'
-            r' onclick="return focusNode(this)" data-node="\1">\1</a>',
+            r' onclick="return focusLink(this)" data-node="\1">\1</a>',
             s,
         )
         s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
@@ -114,7 +159,7 @@ def render_analysis(text: str) -> str:
             out.append("<ol>" + "".join(f"<li>{item}</li>" for item in items) + "</ol>")
             continue
 
-        # Paragraph — collect until blank line or block element
+        # Paragraph
         para: list[str] = []
         while i < len(lines):
             s = lines[i].strip()
@@ -138,7 +183,24 @@ def render_analysis(text: str) -> str:
     return "\n".join(out)
 
 
-_HTML_TEMPLATE = """<!DOCTYPE html>
+# ── Templates ──────────────────────────────────────────────────────────────────
+
+def _write_bare(path: str, title: str, data: dict) -> None:
+    """Single widget, no analysis panel."""
+    if not _BUNDLE_PATH.exists():
+        raise FileNotFoundError(
+            f"Static bundle not found at {_BUNDLE_PATH}. "
+            "Run `npm run build` in js/widget/ to generate it."
+        )
+    bundle_js = _BUNDLE_PATH.read_text(encoding="utf-8")
+    html = (_HTML_TEMPLATE_BARE
+            .replace("{{TITLE}}",    title)
+            .replace("{{DATA_JSON}}", json.dumps(data, ensure_ascii=False))
+            .replace("{{BUNDLE_JS}}", bundle_js))
+    pathlib.Path(path).write_text(html, encoding="utf-8")
+
+
+_HTML_TEMPLATE_BARE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -153,18 +215,16 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
   <div id="hopscotch-root"></div>
-  <script>window.__HOPSCOTCH_DATA__ = {{DATA_JSON}};</script>
+  <script>window.__HS_DATA__ = {{DATA_JSON}};</script>
   <script>{{BUNDLE_JS}}</script>
   <script>
-    HopscotchWidget.renderStatic(
-      window.__HOPSCOTCH_DATA__,
-      document.getElementById('hopscotch-root')
-    );
+    HopscotchWidget.renderStatic(window.__HS_DATA__, document.getElementById('hopscotch-root'));
   </script>
 </body>
 </html>"""
 
-_HTML_TEMPLATE_ANALYSIS = """<!DOCTYPE html>
+
+_HTML_TEMPLATE_REPORT = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -176,62 +236,55 @@ _HTML_TEMPLATE_ANALYSIS = """<!DOCTYPE html>
                  font-family: system-ui, -apple-system, sans-serif; }
     #layout { display: flex; height: 100vh; }
 
-    /* left pane */
-    #left-pane { display: flex; flex-direction: column; width: 50%;
-                 min-width: 240px; }
+    /* ── left pane ── */
+    #left-pane { display: flex; flex-direction: column; width: 50%; min-width: 240px; }
     .tab-bar { display: flex; align-items: center; padding: 0 4px; height: 40px;
                border-bottom: 1px solid #e5e7eb; background: #fff;
-               flex-shrink: 0; gap: 2px; }
+               flex-shrink: 0; gap: 2px; overflow-x: auto; }
     .tab { padding: 0 14px; height: 100%; font-size: 12px; font-weight: 500;
            color: #6b7280; border: none; background: none; cursor: pointer;
-           border-bottom: 2px solid transparent;
-           display: flex; align-items: center; white-space: nowrap; }
+           border-bottom: 2px solid transparent; display: flex; align-items: center;
+           white-space: nowrap; flex-shrink: 0; }
     .tab.active { color: #111827; border-bottom-color: #2563eb; }
     .tab:hover:not(.active) { color: #374151; background: #f9fafb; }
-    .tab-content { flex: 1; min-height: 0; overflow: hidden; position: relative; }
-    #hopscotch-root { position: absolute; inset: 0; }
-    /* override widget fixed-pixel height to fill the pane */
-    #hopscotch-root > div { height: 100% !important;
-                            border-radius: 0 !important; border: none !important; }
+    .tab-content { flex: 1; min-height: 0; position: relative; }
+    /* All panels occupy the same space; only active is visible */
+    .tab-panel { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+    .tab-panel.active { visibility: visible; pointer-events: auto; }
+    .widget-root { position: absolute; inset: 0; }
+    .widget-root > div { height: 100% !important;
+                         border-radius: 0 !important; border: none !important; }
 
-    /* splitter */
+    /* ── splitter ── */
     #splitter { width: 5px; flex-shrink: 0; background: #e5e7eb; cursor: col-resize;
                 transition: background 0.15s; }
     #splitter:hover { background: #93c5fd; }
     body.hs-resizing * { user-select: none; }
     body.hs-resizing #splitter { background: #2563eb; }
 
-    /* right pane */
+    /* ── right pane ── */
     #right-pane { flex: 1; min-width: 240px; display: flex; flex-direction: column;
                   overflow: hidden; background: #fff; border-left: 1px solid #e5e7eb; }
     #analysis-title { height: 40px; display: flex; align-items: center;
                       padding: 0 20px; font-size: 15px; font-weight: 600;
-                      color: #111827; border-bottom: 1px solid #e5e7eb;
-                      flex-shrink: 0; }
+                      color: #111827; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
     #analysis-body { flex: 1; overflow-y: auto; padding: 20px 24px;
                      font-size: 14px; line-height: 1.75; color: #374151; }
     /* markdown */
-    #analysis-body h1 { font-size: 18px; font-weight: 700; color: #111827;
-                        margin: 0 0 14px; }
-    #analysis-body h2 { font-size: 15px; font-weight: 600; color: #111827;
-                        margin: 20px 0 8px; }
-    #analysis-body h3 { font-size: 13px; font-weight: 600; color: #374151;
-                        margin: 16px 0 6px; }
-    #analysis-body h1:first-child,
-    #analysis-body h2:first-child { margin-top: 0; }
+    #analysis-body h1 { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 14px; }
+    #analysis-body h2 { font-size: 15px; font-weight: 600; color: #111827; margin: 20px 0 8px; }
+    #analysis-body h3 { font-size: 13px; font-weight: 600; color: #374151; margin: 16px 0 6px; }
+    #analysis-body h1:first-child, #analysis-body h2:first-child { margin-top: 0; }
     #analysis-body p  { margin: 0 0 12px; }
-    #analysis-body ul,
-    #analysis-body ol { margin: 4px 0 12px 20px; }
+    #analysis-body ul, #analysis-body ol { margin: 4px 0 12px 20px; }
     #analysis-body li { margin-bottom: 4px; }
     #analysis-body strong { color: #111827; font-weight: 600; }
     #analysis-body code { font-family: ui-monospace, monospace; font-size: 12px;
                           background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
     #analysis-body hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
-    #analysis-body table { border-collapse: collapse; width: 100%;
-                           margin: 8px 0 16px; font-size: 13px; }
+    #analysis-body table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 13px; }
     #analysis-body th { background: #f9fafb; font-weight: 600; color: #374151;
-                        padding: 7px 10px; text-align: left;
-                        border: 1px solid #e5e7eb; }
+                        padding: 7px 10px; text-align: left; border: 1px solid #e5e7eb; }
     #analysis-body td { padding: 6px 10px; border: 1px solid #e5e7eb; }
     #analysis-body tr:nth-child(even) td { background: #f9fafb; }
     a.node-link { color: #2563eb; text-decoration: none;
@@ -242,12 +295,8 @@ _HTML_TEMPLATE_ANALYSIS = """<!DOCTYPE html>
 <body>
   <div id="layout">
     <div id="left-pane">
-      <div class="tab-bar">
-        <button class="tab active" data-tab="widget">{{WIDGET_LABEL}}</button>
-      </div>
-      <div class="tab-content">
-        <div id="hopscotch-root"></div>
-      </div>
+      <div class="tab-bar"     id="tab-bar"></div>
+      <div class="tab-content" id="tab-content"></div>
     </div>
     <div id="splitter"></div>
     <div id="right-pane">
@@ -255,39 +304,90 @@ _HTML_TEMPLATE_ANALYSIS = """<!DOCTYPE html>
       <div id="analysis-body">{{ANALYSIS_HTML}}</div>
     </div>
   </div>
-  <script>window.__HOPSCOTCH_DATA__ = {{DATA_JSON}};</script>
+
+  <script>window.__HS_WIDGETS__ = {{WIDGETS_JSON}};</script>
   <script>{{BUNDLE_JS}}</script>
   <script>
-    HopscotchWidget.renderStatic(
-      window.__HOPSCOTCH_DATA__,
-      document.getElementById('hopscotch-root')
-    );
+    (function () {
+      var widgets    = window.__HS_WIDGETS__;
+      var tabBar     = document.getElementById('tab-bar');
+      var tabContent = document.getElementById('tab-content');
 
-    function focusNode(link) {
-      HopscotchWidget.focusNode(link.dataset.node, document.getElementById('hopscotch-root'));
-      return false;
-    }
+      // Build tabs and panels, render each widget
+      widgets.forEach(function (w, i) {
+        var tabId = 'tab-' + i;
 
-    // Resizable splitter — overlay prevents canvas from eating mouse events
-    (function() {
+        var btn = document.createElement('button');
+        btn.className = 'tab' + (i === 0 ? ' active' : '');
+        btn.dataset.tabId = tabId;
+        btn.textContent = w.label;
+        btn.addEventListener('click', function () { activateTab(tabId); });
+        tabBar.appendChild(btn);
+
+        var panel = document.createElement('div');
+        panel.className = 'tab-panel' + (i === 0 ? ' active' : '');
+        panel.id = tabId;
+
+        var root = document.createElement('div');
+        root.className = 'widget-root';
+        panel.appendChild(root);
+        tabContent.appendChild(panel);
+
+        HopscotchWidget.renderStatic(w.data, root);
+      });
+
+      function activateTab(tabId) {
+        document.querySelectorAll('.tab').forEach(function (t) {
+          t.classList.toggle('active', t.dataset.tabId === tabId);
+        });
+        document.querySelectorAll('.tab-panel').forEach(function (p) {
+          p.classList.toggle('active', p.id === tabId);
+        });
+      }
+
+      // Expose for analysis links
+      window.activateTab = activateTab;
+      window.focusLink = function (link) {
+        var tabId     = link.dataset.tab;
+        var eventName = link.dataset.node;
+        if (tabId) {
+          activateTab(tabId);
+          var panel = document.getElementById(tabId);
+          var root  = panel && panel.querySelector('.widget-root');
+          if (root) {
+            HopscotchWidget.focusNode(eventName, root);
+            HopscotchWidget.scrollToEvent(eventName, root);
+          }
+        } else {
+          var activePanel = document.querySelector('.tab-panel.active');
+          var root = activePanel && activePanel.querySelector('.widget-root');
+          if (root) {
+            HopscotchWidget.focusNode(eventName, root);
+            HopscotchWidget.scrollToEvent(eventName, root);
+          }
+        }
+        return false;
+      };
+
+      // Resizable splitter
       var splitter = document.getElementById('splitter');
-      var leftPane = document.getElementById('left-pane');
-      var overlay  = null;
+      var leftPane  = document.getElementById('left-pane');
+      var overlay   = null;
 
-      splitter.addEventListener('mousedown', function(e) {
+      splitter.addEventListener('mousedown', function (e) {
         document.body.classList.add('hs-resizing');
         overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:col-resize';
         document.body.appendChild(overlay);
         e.preventDefault();
       });
-      document.addEventListener('mousemove', function(e) {
+      document.addEventListener('mousemove', function (e) {
         if (!overlay) return;
         var w = Math.max(240, Math.min(window.innerWidth - 240, e.clientX));
         leftPane.style.width = w + 'px';
         leftPane.style.flex  = 'none';
       });
-      document.addEventListener('mouseup', function() {
+      document.addEventListener('mouseup', function () {
         if (!overlay) return;
         overlay.remove(); overlay = null;
         document.body.classList.remove('hs-resizing');

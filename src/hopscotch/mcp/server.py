@@ -60,11 +60,17 @@ def serve(
 # ── server builder ─────────────────────────────────────────────────────────────
 
 def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> FastMCP:
+    from hopscotch.widgets._html_export import write_report_html
+
     mcp = FastMCP(
         "hopscotch",
         instructions=_system_instructions(stream, context),
         port=port,
     )
+
+    # Report builder state — accumulates widgets across add_* calls,
+    # reset by export_report.
+    _pending: list[dict] = []
 
     @mcp.tool()
     def describe() -> str:
@@ -88,159 +94,162 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         return json.dumps(result, ensure_ascii=False)
 
     @mcp.tool()
-    def transition_graph_data(
+    def add_transition_graph(
+        label: str,
         edge_weight: str = "proba_out",
         diff: list | None = None,
         path_id_col: str | None = None,
     ) -> str:
         """
-        Compute transition probabilities between events.
+        Compute a transition graph and register it as a tab in the pending report.
+        Returns the transition matrix so you can analyse it before writing the report.
+
+        Call this (possibly multiple times with different parameters) before
+        calling export_report().
 
         Parameters
         ----------
+        label:
+            Tab label shown in the report. Use a short descriptive name,
+            e.g. "Overall Flow" or "Mobile vs Desktop". No colons in the label.
         edge_weight:
             How to weight edges. One of: proba_out, proba_in, count, unique_paths,
             transition_rate, per_path, time_median, time_q95.
         diff:
             Optional diff: [segment_col, value1, value2].
-            Returns combined (value2 - value1), group1, group2 matrices.
         path_id_col:
             Override the path ID column.
 
         Returns
         -------
-        JSON: events (list), values (N×N matrix). In diff mode also group1, group2.
+        JSON with tab_id, events list, values matrix (and group1/group2 in diff mode).
+        Use tab_id to reference this tab in the analysis text as [label:event].
         """
-        result = stream.transition_graph_data(
-            edge_weight=edge_weight,
-            diff=diff,
-            path_id_col=path_id_col or None,
-        )
-        if diff is not None:
-            combined, g1, g2 = result
-            return json.dumps({
-                "events": combined.index.tolist(),
-                "values": _df_to_list(combined),
-                "group1": {"events": g1.index.tolist(), "values": _df_to_list(g1)},
-                "group2": {"events": g2.index.tolist(), "values": _df_to_list(g2)},
-                "diff":   diff,
-            }, ensure_ascii=False)
-        return json.dumps({
-            "events": result.index.tolist(),
-            "values": _df_to_list(result),
-        }, ensure_ascii=False)
+        widget = stream.transition_graph(edge_weight=edge_weight, diff=diff,
+                                         path_id_col=path_id_col or None)
+        data = {
+            "widget_type":      "transition_graph",
+            "result":           json.loads(widget.result or "{}"),
+            "edge_weight":      widget.edge_weight,
+            "diff":             json.loads(widget.diff) if widget.diff else None,
+            "event_counts":     json.loads(widget.event_counts or "{}"),
+            "event_counts_g1":  json.loads(widget.event_counts_g1 or "{}"),
+            "event_counts_g2":  json.loads(widget.event_counts_g2 or "{}"),
+            "node_positions":   {},
+            "event_visibility": {},
+            "segment_levels":   json.loads(widget.segment_levels or "{}"),
+            "path_cols":        json.loads(widget.path_cols or "[]"),
+            "path_id_col":      widget.path_id_col or "",
+            "height":           widget.height,
+            "sidebar_open":     False,
+        }
+        tab_id = f"tab-{len(_pending)}"
+        _pending.append({"label": label, "data": data})
+
+        # Return matrix data for Claude to analyse
+        result_raw = json.loads(widget.result or "{}")
+        out: dict = {
+            "tab_id":  tab_id,
+            "label":   label,
+            "events":  result_raw.get("events", []),
+            "values":  result_raw.get("values", []),
+        }
+        if result_raw.get("group1"):
+            out["group1"] = result_raw["group1"]
+            out["group2"] = result_raw["group2"]
+        return json.dumps(out, ensure_ascii=False)
 
     @mcp.tool()
-    def export_html(
-        path: str | None = None,
-        title: str = "Transition Graph",
-        edge_weight: str = "proba_out",
-        diff: list | None = None,
-        analysis: str | None = None,
-    ) -> str:
-        """
-        Render the transition graph as a standalone interactive HTML file.
-        Returns the absolute path to the generated file.
-
-        The HTML is self-contained (no server needed) — open in any browser,
-        share, or embed in slides.
-
-        Parameters
-        ----------
-        path:
-            Destination file path. If None, a temp file is created.
-        title:
-            Title shown in the browser tab and as the report heading.
-        edge_weight / diff:
-            Same as transition_graph_data.
-        analysis:
-            Your written analysis of the graph. Wrap event names in square
-            brackets to make them clickable links that focus the node, e.g.:
-            "The biggest drop-off is at [basket] (78% of users leave here).
-            Users who reach [purchase] typically came via [view]."
-            Supports markdown: **bold**, *italic*, # headings, tables, - lists.
-        """
-        if path is None:
-            tmp = tempfile.NamedTemporaryFile(
-                suffix=".html", delete=False, prefix="hopscotch_"
-            )
-            path = tmp.name
-            tmp.close()
-
-        widget = stream.transition_graph(edge_weight=edge_weight, diff=diff)
-        widget.export_html(path, title=title, analysis=analysis)
-        return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title})
-
-    @mcp.tool()
-    def step_matrix_data(
+    def add_step_matrix(
+        label: str,
         max_steps: int = 10,
         diff: list | None = None,
         path_pattern: str | None = None,
         path_id_col: str | None = None,
     ) -> str:
         """
-        Compute a step matrix: for each event, its frequency at each relative
-        step position around an anchor.
+        Compute a step matrix and register it as a tab in the pending report.
+        Returns the matrix data so you can analyse it before writing the report.
+
+        Call this (possibly multiple times) before calling export_report().
 
         Parameters
         ----------
+        label:
+            Tab label shown in the report. No colons in the label.
         max_steps:
-            Maximum number of steps before/after anchor to include.
+            Maximum steps before/after anchor.
         diff:
             Optional diff: [segment_col, value1, value2].
         path_pattern:
-            Filter to paths matching this pattern, e.g. "add_to_cart->.*->purchase".
+            Filter paths, e.g. "add_to_cart->.*->purchase".
         path_id_col:
             Override the path ID column.
 
         Returns
         -------
-        JSON with matrices list (each has events, columns, values) and event_counts.
+        JSON with tab_id, matrices list, event_counts.
         """
-        raw = stream.step_sankey_data(
-            max_steps=max_steps,
-            diff=diff,
+        widget = stream.step_matrix(
+            max_steps=max_steps, diff=diff,
             path_id_col=path_id_col or None,
             path_pattern=path_pattern or None,
         )
-        if diff is not None:
-            diff_sms, sms1, sms2 = raw
-            matrices = [_df_to_matrix(sm) for sm in diff_sms]
-            g1 = [_df_to_matrix(sm) for sm in sms1]
-            g2 = [_df_to_matrix(sm) for sm in sms2]
-            for i, m in enumerate(matrices):
-                m["group1"] = g1[i]
-                m["group2"] = g2[i]
-        else:
-            matrices = [_df_to_matrix(sm) for sm in raw]
-        return json.dumps({"matrices": matrices}, ensure_ascii=False)
+        data = {
+            "widget_type":    "step_matrix",
+            "result":         json.loads(widget.result or "{}"),
+            "max_steps":      widget.max_steps,
+            "diff":           json.loads(widget.diff) if widget.diff else None,
+            "path_id_col":    widget.path_id_col or "",
+            "path_pattern":   widget.path_pattern or "",
+            "path_cols":      json.loads(widget.path_cols or "[]"),
+            "segment_levels": json.loads(widget.segment_levels or "{}"),
+            "event_list":     json.loads(widget.event_list or "[]"),
+            "height":         widget.height,
+            "sidebar_open":   False,
+            "display_prefs":  "{}",
+        }
+        tab_id = f"tab-{len(_pending)}"
+        _pending.append({"label": label, "data": data})
+
+        result_raw = json.loads(widget.result or "{}")
+        return json.dumps({
+            "tab_id":        tab_id,
+            "label":         label,
+            "matrices":      result_raw.get("matrices", []),
+            "event_counts":  result_raw.get("event_counts", {}),
+        }, ensure_ascii=False)
 
     @mcp.tool()
-    def export_step_matrix_html(
-        path: str | None = None,
-        title: str = "Step Matrix",
-        max_steps: int = 10,
-        diff: list | None = None,
-        path_pattern: str | None = None,
+    def export_report(
+        title: str = "Analysis Report",
         analysis: str | None = None,
+        path: str | None = None,
     ) -> str:
         """
-        Render the step matrix as a standalone interactive HTML file.
-        Returns the absolute path to the generated file.
+        Generate the HTML report with all widgets added via add_transition_graph /
+        add_step_matrix. Resets the pending widget list afterwards.
 
         Parameters
         ----------
+        title:
+            Report title shown in the browser tab and as the heading.
+        analysis:
+            Full written analysis in markdown. Reference specific tabs and events
+            with [tab_label:event_name] — clicking the link will activate that tab
+            and focus the event. Use [event_name] (no label prefix) to focus in
+            whichever tab is currently active.
+            Example:
+              "Drop-off at [Overall Flow:basket] is 45%. Timing shows
+               [Timing:basket] takes 2.3 min on average. In the funnel
+               [Purchase Funnel:payment_details] is the main bottleneck."
+            Supports markdown: # headings, **bold**, *italic*, tables, - lists.
         path:
             Destination file path. If None, a temp file is created.
-        title:
-            Title shown in the browser tab and as the report heading.
-        max_steps / diff / path_pattern:
-            Same as step_matrix_data.
-        analysis:
-            Your written analysis. Wrap event names in [brackets] to make them
-            clickable — they will scroll the matrix to that event row.
-            Supports markdown: **bold**, *italic*, # headings, tables, - lists.
         """
+        if not _pending:
+            return json.dumps({"error": "No widgets added. Call add_transition_graph or add_step_matrix first."})
+
         if path is None:
             tmp = tempfile.NamedTemporaryFile(
                 suffix=".html", delete=False, prefix="hopscotch_"
@@ -248,11 +257,12 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
             path = tmp.name
             tmp.close()
 
-        widget = stream.step_matrix(
-            max_steps=max_steps, diff=diff, path_pattern=path_pattern or None
-        )
-        widget.export_html(path, title=title, analysis=analysis)
-        return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title})
+        widgets = list(_pending)
+        _pending.clear()
+
+        write_report_html(path, title, widgets, analysis)
+        return json.dumps({"path": str(pathlib.Path(path).resolve()), "title": title,
+                           "tabs": [w["label"] for w in widgets]})
 
     return mcp
 
@@ -303,18 +313,23 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         lines.append(f"Key metrics: {descs}")
     lines += [
         "",
-        "Available tools:",
-        "- describe()                  — stream schema and event list",
-        "- transition_graph_data()     — Markov transition matrix",
-        "- export_html()               — interactive transition graph HTML report",
-        "- step_matrix_data()          — step matrix (event frequency per step position)",
-        "- export_step_matrix_html()   — interactive step matrix HTML report",
+        "## Workflow",
+        "1. Call describe() to understand the data.",
+        "2. Call add_transition_graph() and/or add_step_matrix() one or more times.",
+        "   Each call computes a visualisation, returns its data for analysis,",
+        "   and registers it as a tab (tab-0, tab-1, …) in the pending report.",
+        "   You can add multiple visualisations of the same type with different",
+        "   parameters (e.g. proba_out graph + time_median graph).",
+        "3. Call export_report() with your full written analysis.",
+        "   The HTML file will contain all added tabs and the analysis panel.",
         "",
-        "When reporting findings:",
-        "- Wrap event names in [square brackets] — e.g. [basket], [purchase].",
-        "- Always call the relevant export_*_html() tool with your analysis text.",
-        "  In the analysis, [event_name] references become clickable links.",
-        "- Tell the user the file path so they can open it.",
-        "- Use markdown in analysis: # headings, **bold**, tables, - bullet lists.",
+        "## Analysis text",
+        "- Use markdown: # Heading, ## Sub, **bold**, *italic*, - list, | table |.",
+        "- Reference a specific tab+event with [tab_label:event_name].",
+        "  Example: 'Drop-off at [Overall Flow:basket] reaches 45%.'",
+        "  The link will activate that tab and focus the node/row.",
+        "- Use [event_name] (no label) to focus in whichever tab is active.",
+        "- Tab labels must not contain colons.",
+        "- Always call export_report() and tell the user the file path.",
     ]
     return "\n".join(lines)
