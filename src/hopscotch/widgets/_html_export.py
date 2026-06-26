@@ -94,15 +94,22 @@ def render_analysis(text: str, label_map: dict | None = None) -> str:
                     widget_type = ""
                     segment_col = ""
                 # Segment overview links
+                if not ref:
+                    # Empty ref: just activate the tab, no focus
+                    return (
+                        f'<a href="javascript:void(0)" class="node-link"'
+                        f' onclick="return focusLink(this)"'
+                        f' data-tab="{tab_id}"'
+                        f' title="Open: {_html_mod.escape(label)}">'
+                        f'{_html_mod.escape(label)}</a>'
+                    )
                 if widget_type == "segment_overview" and segment_col:
                     at = ref.find("@")
                     if at != -1:
-                        # metric@segment → "metric(segment_col: segment)"
                         metric   = ref[:at]
                         seg_val  = ref[at + 1:]
                         display  = f"{metric}({_html_mod.escape(segment_col)}: {seg_val})"
                     else:
-                        # column or row ref
                         display  = f"{_html_mod.escape(segment_col)}: {ref}"
                 else:
                     display = ref
@@ -113,7 +120,8 @@ def render_analysis(text: str, label_map: dict | None = None) -> str:
                     f' title="Open in: {_html_mod.escape(label)}">'
                     f'{display}</a>'
                 )
-            s = re.sub(r"\[([^:\]]+):([^\]]+)\]", _tab_link, s)
+            # Allow empty ref after colon: [Tab Name:] — just activate tab
+            s = re.sub(r"\[([^:\]]+):(.*?)\]", _tab_link, s)
 
         # [event] — focus in active tab
         s = re.sub(
@@ -383,21 +391,18 @@ _HTML_TEMPLATE_REPORT = """<!DOCTYPE html>
       window.focusLink = function (link) {
         var tabId     = link.dataset.tab;
         var eventName = link.dataset.node;
+        var root;
         if (tabId) {
           activateTab(tabId);
           var panel = document.getElementById(tabId);
-          var root  = panel && panel.querySelector('.widget-root');
-          if (root) {
-            HopscotchWidget.focusNode(eventName, root);
-            HopscotchWidget.scrollToEvent(eventName, root);
-          }
+          root = panel && panel.querySelector('.widget-root');
         } else {
           var activePanel = document.querySelector('.tab-panel.active');
-          var root = activePanel && activePanel.querySelector('.widget-root');
-          if (root) {
-            HopscotchWidget.focusNode(eventName, root);
-            HopscotchWidget.scrollToEvent(eventName, root);
-          }
+          root = activePanel && activePanel.querySelector('.widget-root');
+        }
+        if (root && eventName) {
+          HopscotchWidget.focusNode(eventName, root);
+          HopscotchWidget.scrollToEvent(eventName, root);
         }
         return false;
       };
