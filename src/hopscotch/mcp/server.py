@@ -221,6 +221,100 @@ def _build_server(stream: "Eventstream", context: dict, port: int = 8765) -> Fas
         }, ensure_ascii=False)
 
     @mcp.tool()
+    def add_segment_overview(
+        label: str,
+        segment_col: str,
+        metrics_config: list | None = None,
+        path_id_col: str | None = None,
+    ) -> str:
+        """
+        Compute a segment overview and register it as a tab in the pending report.
+        Returns the overview table so you can analyse it before writing the report.
+
+        Call this (possibly multiple times with different segment columns) before
+        calling export_report().
+
+        Parameters
+        ----------
+        label:
+            Tab label shown in the report. No colons in the label.
+        segment_col:
+            Column to segment by (must be listed in segment_cols from describe()).
+        metrics_config:
+            List of additional metric dicts. segment_size and segment_share are
+            always computed automatically and do not need to be specified.
+
+            Each dict: {"metric": <name>, "metric_args": {...}, "agg": <agg>}
+            "agg" choices: "mean" (default), "median", "complement_diff",
+                           "q5", "q25", "q75", "q95"
+
+            Available metrics and their metric_args:
+              {"metric": "length"}
+                  — number of events per path
+              {"metric": "duration"}
+                  — duration in seconds (first to last event)
+              {"metric": "event_count", "metric_args": {"events": "purchase"}}
+                  — how many times the event occurred; events can also be a list
+              {"metric": "has", "metric_args": {"events": "purchase"}}
+                  — 0/1 whether the path contains the event (conversion rate)
+              {"metric": "time_between",
+               "metric_args": {"event_from": "add_to_cart", "event_to": "purchase"}}
+                  — seconds between first occurrences of two events
+              {"metric": "matches",
+               "metric_args": {"pattern": "add_to_cart->.*->purchase"}}
+                  — 0/1 whether path matches the pattern
+
+            Examples:
+              Conversion rate to purchase by platform:
+                metrics_config=[
+                  {"metric": "has",  "metric_args": {"events": "purchase"}, "agg": "mean"},
+                  {"metric": "length"},
+                  {"metric": "duration", "agg": "median"},
+                ]
+              Time-to-purchase by acquisition channel:
+                metrics_config=[
+                  {"metric": "time_between",
+                   "metric_args": {"event_from": "home", "event_to": "purchase"},
+                   "agg": "median"},
+                ]
+        path_id_col:
+            Override the path ID column.
+
+        Returns
+        -------
+        JSON with tab_id, metrics list, segments list, values matrix.
+        """
+        widget = stream.segment_overview(
+            segment_col=segment_col,
+            metrics_config=metrics_config or [],
+            path_id_col=path_id_col or None,
+        )
+        data = {
+            "widget_type":    "segment_overview",
+            "result":         json.loads(widget.result or "{}"),
+            "segment_col":    widget.segment_col or "",
+            "path_id_col":    widget.path_id_col or "",
+            "metrics_config": json.loads(widget.metrics_config or "[]"),
+            "segment_cols":   json.loads(widget.segment_cols or "[]"),
+            "segment_levels": json.loads(widget.segment_levels or "{}"),
+            "path_cols":      json.loads(widget.path_cols or "[]"),
+            "event_list":     json.loads(widget.event_list or "[]"),
+            "height":         widget.height,
+            "sidebar_open":   False,
+        }
+        tab_id = f"tab-{len(_pending)}"
+        _pending.append({"label": label, "data": data})
+
+        result_raw = json.loads(widget.result or "{}")
+        return json.dumps({
+            "tab_id":   tab_id,
+            "label":    label,
+            "metrics":  result_raw.get("metrics", []),
+            "segments": result_raw.get("segments", []),
+            "values":   result_raw.get("values", []),
+        }, ensure_ascii=False)
+
+    @mcp.tool()
     def export_report(
         title: str = "Analysis Report",
         analysis: str | None = None,
@@ -317,7 +411,7 @@ def _system_instructions(stream: "Eventstream", context: dict) -> str:
         "",
         "## Workflow",
         "1. Call describe() to understand the data.",
-        "2. Call add_transition_graph() and/or add_step_matrix() one or more times.",
+        "2. Call add_transition_graph(), add_step_matrix(), and/or add_segment_overview() one or more times.",
         "   Each call computes a visualisation, returns its data for analysis,",
         "   and registers it as a tab (tab-0, tab-1, …) in the pending report.",
         "   You can add multiple visualisations of the same type with different",

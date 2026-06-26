@@ -8,6 +8,7 @@ _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
 
 from hopscotch.widgets._esm import _get_esm  # noqa: E402
+from hopscotch.widgets._html_export import write_html
 
 
 class SegmentOverviewWidget(anywidget.AnyWidget):
@@ -126,6 +127,29 @@ class SegmentOverviewWidget(anywidget.AnyWidget):
             self.result = "{}"
         finally:
             self.is_loading = False
+
+    # ── HTML export ───────────────────────────────────────────────────────────
+
+    def export_html(
+        self,
+        path: str,
+        title: str = "Segment Overview",
+        analysis: str | None = None,
+    ) -> None:
+        data = {
+            "widget_type":    "segment_overview",
+            "result":         json.loads(self.result or "{}"),
+            "segment_col":    self.segment_col or "",
+            "path_id_col":    self.path_id_col or "",
+            "metrics_config": json.loads(self.metrics_config or "[]"),
+            "segment_cols":   json.loads(self.segment_cols or "[]"),
+            "segment_levels": json.loads(self.segment_levels or "{}"),
+            "path_cols":      json.loads(self.path_cols or "[]"),
+            "event_list":     json.loads(self.event_list or "[]"),
+            "height":         self.height,
+            "sidebar_open":   False,
+        }
+        write_html(path, title, "Segment Overview", data, analysis)
 
     def _compute_distribution(self, req: dict):
         self.is_loading = True
