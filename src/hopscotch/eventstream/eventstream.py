@@ -475,7 +475,7 @@ class Eventstream:
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_collapse_events")
-    def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, daily_states=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
+    def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
         """
         Merge consecutive or grouped events into a single representative event.
 
@@ -521,7 +521,59 @@ class Eventstream:
             stream.collapse_events(event_groups=[{"events": ["checkout_start", "checkout_step", "checkout_confirm"], "name": "checkout"}])
         """
         from hopscotch.data_processors.collapse_events import CollapseEvents
-        new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, daily_states=daily_states, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
+        return Eventstream(new_df, asdict(new_schema), prepare=False)
+
+    @_tracked("dp_daily_states")
+    def daily_states(self, active_events=None, max_dormant_days: int = 30, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
+        """
+        Convert the eventstream into daily lifecycle-state events.
+
+        Each path is expanded to one row per calendar day from its first event
+        to ``max_dormant_days`` days after its last event. Every row is labelled
+        with one of six engagement states.
+
+        Active days:
+            ``new``          — first-ever active day for this path
+            ``current``      — active within the past 7 days
+            ``reactivated``  — active 8–30 days ago, not in the last 7
+            ``resurrected``  — last active more than 30 days ago
+
+        Inactive days:
+            ``at_risk_wau``  — was active within the past 7 days
+            ``at_risk_mau``  — was active 8–30 days ago
+            ``dormant``      — was last active more than 30 days ago
+
+        Parameters
+        ----------
+        active_events : list of str, optional
+            Events that count as "activity". If omitted, any event counts.
+        max_dormant_days : int, default 30
+            Days after last event to continue generating state rows.
+        agg : dict, optional
+            Per-column aggregation overrides (e.g. ``{"revenue": "sum"}``).
+        path_id_col : str, optional
+            Override the path ID column.
+        event_col : str, optional
+            Override the event column.
+
+        Examples
+        --------
+            stream.daily_states()
+            stream.daily_states(active_events=["purchase", "add_to_cart"], max_dormant_days=60)
+
+        As a preprocessor in MCP update_base_stream / local_preprocessors:
+            {"type": "daily_states"}
+            {"type": "daily_states", "active_events": ["purchase"], "max_dormant_days": 60}
+        """
+        from hopscotch.data_processors.daily_states import DailyStates
+        new_df, new_schema = DailyStates(
+            active_events=active_events,
+            max_dormant_days=max_dormant_days,
+            agg=agg,
+            path_id_col=path_id_col,
+            event_col=event_col,
+        ).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_drop_segment")

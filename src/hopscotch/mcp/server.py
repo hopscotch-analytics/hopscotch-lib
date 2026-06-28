@@ -538,6 +538,11 @@ def _apply_preprocessors(stream: Any, preprocessors: list) -> Any:
                 sql=step.get("sql"),
                 churn=step.get("churn"),
             )
+        elif t == "daily_states":
+            stream = stream.daily_states(
+                active_events=step.get("active_events"),
+                max_dormant_days=step.get("max_dormant_days", 30),
+            )
         elif t == "add_segment":
             stream = stream.add_segment(
                 name=step["name"],
