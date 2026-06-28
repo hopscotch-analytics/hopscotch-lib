@@ -158,6 +158,32 @@ class Eventstream:
 
     @_tracked("dp_filter_events")
     def filter_events(self, by_column: dict | None = None, func=None, sql: str | None = None) -> "Eventstream":
+        """
+        Keep only rows that match a column filter, a Python predicate, or a SQL WHERE clause.
+
+        Exactly one of `by_column`, `func`, or `sql` must be provided. If all are `None`
+        the eventstream is returned unchanged.
+
+        Parameters
+        ----------
+        by_column : dict, optional
+            Dict with keys `"column"` (str), `"values"` (list), and an optional
+            `"exclude"` (bool, default `False`). When `exclude` is `False`, keeps rows
+            where the named column contains one of the listed values; when `True`,
+            removes those rows instead.
+        func : callable, optional
+            A function that accepts the raw pandas DataFrame and returns a boolean Series.
+            Rows where the Series is `True` are kept.
+        sql : str, optional
+            DuckDB SQL SELECT statement that reads from the `eventstream` table alias and
+            returns all original columns. Example: `"SELECT * FROM eventstream WHERE event NOT LIKE 'system_%'"`.
+
+        Examples
+        --------
+            stream.filter_events(by_column={"column": "event", "values": ["purchase", "add_to_cart"]})
+            stream.filter_events(by_column={"column": "event", "values": ["system_event"], "exclude": True})
+            stream.filter_events(sql="SELECT * FROM eventstream WHERE event NOT LIKE 'system_%'")
+        """
         from hopscotch.data_processors.filter_events import FilterEvents
         if by_column is None and func is None and sql is None:
             return Eventstream(self._df.copy(), asdict(self.schema), prepare=False)
@@ -166,12 +192,100 @@ class Eventstream:
 
     @_tracked("dp_add_clusters")
     def add_clusters(self, segment_name: str, features: list, method: str = "kmeans", scaler=None, n_clusters=None, min_cluster_size=None, cluster_selection_epsilon=None, nmf_k=None, path_id_col=None, event_col=None) -> "Eventstream":
+        """
+        Cluster paths using ML and add a new segment column with integer cluster labels.
+
+        Per-path metrics are computed from `features`, optionally scaled, then passed to
+        the chosen clustering algorithm. The resulting cluster label is broadcast to every
+        row of the corresponding path.
+
+        Parameters
+        ----------
+        segment_name : str
+            Name of the new segment column to add.
+        features : list of dict
+            Metric configurations for `MetricBuilder`. Each dict has a `"metric"` key
+            (str) and an optional `"metric_args"` key (dict). Available metrics:
+            `"length"`, `"duration"`, `"event_count"`, `"has"`, `"time_between"`,
+            `"first_event_dt"`, `"active_days"`, `"matches"`, `"belongs_to"`.
+            See `stream.get_metrics()` for the full metric reference.
+        method : str, default `"kmeans"`
+            Clustering algorithm. One of `"kmeans"` or `"hdbscan"`.
+        scaler : str or None, default `None`
+            Feature scaler applied before clustering. One of `"minmax"`, `"std"`, or `None`.
+        n_clusters : int, optional
+            Number of clusters (required for `"kmeans"`).
+        min_cluster_size : int, optional
+            Minimum cluster size (used by `"hdbscan"`).
+        cluster_selection_epsilon : float, optional
+            HDBSCAN cluster-selection epsilon.
+        nmf_k : int, optional
+            When set, reduces features to `nmf_k` NMF components before clustering.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+        event_col : str, optional
+            Event column override; defaults to `schema.event_col`.
+
+        Examples
+        --------
+            stream.add_clusters(
+                segment_name="cluster",
+                features=[
+                    {"metric": "length"},
+                    {"metric": "event_count", "metric_args": {"events": "purchase"}},
+                ],
+                method="kmeans",
+                n_clusters=4,
+                scaler="minmax",
+            )
+        """
         from hopscotch.data_processors.add_clusters import AddClusters
         new_df, new_schema = AddClusters(eventstream=self, segment_name=segment_name, features=features, method=method, scaler=scaler, n_clusters=n_clusters, min_cluster_size=min_cluster_size, cluster_selection_epsilon=cluster_selection_epsilon, nmf_k=nmf_k, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_url_events")
     def url_events(self, column: str, nodes: list, strip_host: bool = True, strip_cgi: bool = True, strip_locale: bool = True, slug_enabled: bool = True, host_col=None, cgi_col=None, locale_col=None, slug_col=None) -> "Eventstream":
+        """
+        Parse a raw URL column into structured event name labels using a path tree.
+
+        Each URL is matched against the `nodes` tree. Matching cut nodes become the
+        event label; pages deeper than a cut node get a `cut_path/slug` label. The
+        original URL column is replaced in-place.
+
+        Parameters
+        ----------
+        column : str
+            Name of the column that contains raw URL strings.
+        nodes : list of dict
+            URL path tree. Each node dict must have a `"path"` key (str) and may
+            include `"is_cut"` (bool), `"is_deleted"` (bool), and `"custom_name"` (str).
+        strip_host : bool, default `True`
+            Remove the scheme and hostname, keeping only the pathname.
+        strip_cgi : bool, default `True`
+            Remove the query string and URL fragment.
+        strip_locale : bool, default `True`
+            Remove a leading 2-letter BCP-47 locale segment (e.g. `"en"`, `"fr-ca"`).
+        slug_enabled : bool, default `True`
+            When `False`, cut nodes are ignored and every URL keeps its normalized path.
+        host_col : str, optional
+            If provided, save the extracted hostname into this new column.
+        cgi_col : str, optional
+            If provided, save the extracted query string into this new column.
+        locale_col : str, optional
+            If provided, save the detected locale prefix into this new column.
+        slug_col : str, optional
+            If provided, save the sub-page slug into this new column.
+
+        Examples
+        --------
+            stream.url_events(
+                column="page",
+                nodes=[
+                    {"path": "/catalog", "is_cut": True},
+                    {"path": "/checkout", "is_cut": True, "custom_name": "checkout"},
+                ],
+            )
+        """
         from hopscotch.data_processors.url_events import UrlEvents
         new_df, new_schema = UrlEvents(column=column, nodes=nodes, strip_host=strip_host, strip_cgi=strip_cgi, strip_locale=strip_locale, slug_enabled=slug_enabled, host_col=host_col, cgi_col=cgi_col, locale_col=locale_col, slug_col=slug_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
@@ -179,22 +293,43 @@ class Eventstream:
     @_tracked("dp_filter_paths")
     def filter_paths(self, ast_condition: dict, path_id_col: str | None = None, event_col: str | None = None) -> "Eventstream":
         """
-        Filter paths based on an AST condition.
+        Keep only paths that satisfy an AST-based metric condition.
 
-        The ast_condition can include various metrics like:
-        - event_count: count of specific events
-        - has: presence of specific event(s)
-        - matches: whether path matches a pattern
-        - length, duration, time_between, active_days, etc.
+        The condition is a tree of comparison nodes connected by `and` / `or` / `not`
+        branch nodes. Per-path metrics are computed once and the condition is evaluated
+        in SQL.
 
-        Example:
-            ast_condition = {
+        Raises `EmptyEventstreamError` when no paths match.
+
+        Parameters
+        ----------
+        ast_condition : dict
+            Condition tree. Leaf nodes have the keys:
+              - `op` — comparison operator: `>`, `>=`, `<`, `<=`, `=`, `!=`.
+              - `metric` — metric name (see `stream.get_metrics()` for the full list).
+              - `value` — threshold value.
+              - `metric_args` (optional) — dict of extra arguments for the metric.
+            Branch nodes have `op` set to `and`, `or`, or `not` and an `args` list of
+            child nodes.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+        event_col : str, optional
+            Event column override; defaults to `schema.event_col`.
+
+        Examples
+        --------
+            # Keep paths that contain at least one purchase
+            stream.filter_paths({"op": ">", "metric": "event_count", "value": 0, "metric_args": {"events": "purchase"}})
+
+            # Keep paths longer than 3 events that match a funnel pattern
+            stream.filter_paths({
                 "op": "and",
                 "args": [
-                    {"op": ">", "metric": "event_count", "value": 1, "metric_args": {"events": "purchase"}},
-                    {"op": "=", "metric": "matches", "value": True, "metric_args": {"pattern": "registration->.*->purchase"}},
+                    {"op": ">", "metric": "length", "value": 3},
+                    {"op": "=", "metric": "matches", "value": True,
+                     "metric_args": {"pattern": "registration->.*->purchase"}},
                 ]
-            }
+            })
         """
         from hopscotch.data_processors.filter_paths import FilterPaths
         from hopscotch.exceptions import EmptyEventstreamError
@@ -236,6 +371,37 @@ class Eventstream:
 
     @_tracked("dp_add_events")
     def add_events(self, new_event_name: str, source_events=None, sql=None, churn=None) -> "Eventstream":
+        """
+        Insert synthetic events derived from existing events or a SQL query.
+
+        Exactly one of `source_events`, `sql`, or `churn` must be provided.
+        The new event rows are appended to the eventstream; original rows are kept.
+
+        Parameters
+        ----------
+        new_event_name : str
+            Name of the synthetic event to create.
+        source_events : list of str, optional
+            List of existing event names. For each path, a synthetic event is inserted
+            at the timestamp of the first matching source event.
+        sql : str, optional
+            DuckDB SQL SELECT statement that reads from the `eventstream` table alias
+            and returns rows in the eventstream schema. Each returned row is added as a
+            new synthetic event.
+        churn : dict, optional
+            Creates a churn event after a period of inactivity. Required key:
+              - `inactivity_days` (int or float) — gap in days after which a churn event
+                is inserted.
+            Optional key:
+              - `active_events` (list of str) — only these events count as activity;
+                defaults to all events.
+
+        Examples
+        --------
+            stream.add_events("session_start", source_events=["login", "app_open"])
+            stream.add_events("churned", churn={"inactivity_days": 30})
+            stream.add_events("churned", churn={"inactivity_days": 30, "active_events": ["purchase"]})
+        """
         from hopscotch.data_processors.add_events import AddEvents
         new_df, new_schema = AddEvents(new_event_name, source_events=source_events, sql=sql, churn=churn).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
@@ -243,6 +409,64 @@ class Eventstream:
     @_tracked("dp_add_segment")
     def add_segment(self, name: str, values=None, func=None, sql=None,
                     funnel_events=None, path_id_col=None) -> "Eventstream":
+        """
+        Add a new categorical segment column to the eventstream.
+
+        Exactly one of `values`, `func`, `sql`, or `funnel_events` must be provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the new segment column.
+        values : list, optional
+            CASE-WHEN rules. A list of conditions plus a final else entry:
+              - Each condition entry is `[column, op, value, label]` — translates to
+                `WHEN <column> <op> <value> THEN <label>` in SQL.
+              - The last entry is `[else_label]` — the ELSE branch label.
+            Example: `[["country", "=", "US", "domestic"], ["international"]]`.
+        func : callable, optional
+            A function that accepts the raw pandas DataFrame and returns a collection of
+            segment labels with the same length and order as the eventstream rows.
+        sql : str, optional
+            DuckDB SQL SELECT statement that reads from the `eventstream` table alias and
+            returns exactly one column — the segment label for each row. Row count and
+            order must match the eventstream.
+            Example: `"SELECT CASE WHEN platform = 'mobile' THEN 'mobile' ELSE 'web' END FROM eventstream"`.
+        funnel_events : list of str, optional
+            Ordered list of at least 2 event names defining a funnel. Each path is
+            assigned the name of the last funnel step reached in sequence, or
+            `out_of_funnel` if the first step was never reached.
+            Segment values (in ascending funnel order): `out_of_funnel`, then each
+            event name from `funnel_events[0]` to `funnel_events[-1]`.
+        path_id_col : str, optional
+            Path ID column override for `funnel_events` mode; defaults to
+            `schema.path_col`.
+
+        Examples
+        --------
+            # values mode — CASE WHEN rules
+            stream.add_segment(
+                "region",
+                values=[
+                    ["country", "=", "US", "domestic"],
+                    ["country", "in", "('GB', 'DE', 'FR')", "europe"],
+                    ["other"],
+                ],
+            )
+
+            # funnel_events mode — assign the last funnel step reached per path
+            stream.add_segment(
+                "funnel",
+                funnel_events=["add_to_cart", "checkout_start", "purchase"],
+            )
+            # Resulting segment values: out_of_funnel | add_to_cart | checkout_start | purchase
+
+            # sql mode — one computed column, same row order as the eventstream
+            stream.add_segment(
+                "device",
+                sql="SELECT CASE WHEN platform = 'mobile' THEN 'mobile' ELSE 'web' END FROM eventstream",
+            )
+        """
         from hopscotch.data_processors.add_segment import AddSegment
         new_df, new_schema = AddSegment(
             name, values=values, func=func, sql=sql,
@@ -252,42 +476,210 @@ class Eventstream:
 
     @_tracked("dp_collapse_events")
     def collapse_events(self, repetitive=None, event_groups=None, event_from_col=None, daily_states=None, session_id_col=None, session_type_col=None, agg=None, path_id_col=None, event_col=None) -> "Eventstream":
+        """
+        Merge consecutive or grouped events into a single representative event.
+
+        Exactly one of `repetitive`, `event_groups`, `event_from_col`, or
+        `session_id_col` must be provided.
+
+        Parameters
+        ----------
+        repetitive : bool or list of str, optional
+            Collapse consecutive identical events into one.
+            Pass `True` to collapse all events; pass a list of event names to collapse
+            only those specific events.
+        event_groups : list of dict, optional
+            Merge a set of events that belong together into a single representative event.
+            Each group dict must have either an `events` key (list of event names to
+            merge) or a `separator` / `start_event` + `end_event` pair. Additional keys:
+              - `name` (str) — label for the merged event; defaults to the group's first event.
+        event_from_col : str, optional
+            Name of a column whose value replaces the event name. Consecutive rows with
+            the same column value are collapsed into one event.
+        session_id_col : str, optional
+            Collapse events within each session defined by this column. Requires
+            `session_type_col` as well.
+        session_type_col : str, optional
+            Column that distinguishes session event types (used with `session_id_col`).
+        agg : dict, optional
+            Aggregation rules for non-event columns when rows are merged, as a
+            `{column: agg_func}` dict. Example: `{"duration": "sum"}`.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+        event_col : str, optional
+            Event column override; defaults to `schema.event_col`.
+
+        Examples
+        --------
+            # Collapse any run of the same event
+            stream.collapse_events(repetitive=True)
+
+            # Collapse only repeated page_view events
+            stream.collapse_events(repetitive=["page_view"])
+
+            # Merge checkout steps into a single "checkout" event
+            stream.collapse_events(event_groups=[{"events": ["checkout_start", "checkout_step", "checkout_confirm"], "name": "checkout"}])
+        """
         from hopscotch.data_processors.collapse_events import CollapseEvents
         new_df, new_schema = CollapseEvents(repetitive=repetitive, event_groups=event_groups, event_from_col=event_from_col, daily_states=daily_states, session_id_col=session_id_col, session_type_col=session_type_col, agg=agg, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_drop_segment")
     def drop_segment(self, name: str) -> "Eventstream":
+        """
+        Remove a segment column from the eventstream.
+
+        Parameters
+        ----------
+        name : str
+            Name of the segment column to remove. Must exist in `schema.segment_cols`.
+
+        Examples
+        --------
+            stream.drop_segment("cluster")
+        """
         from hopscotch.data_processors.drop_segment import DropSegment
         new_df, new_schema = DropSegment(name).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_edit_events")
     def edit_events(self, rename=None, delete=None) -> "Eventstream":
+        """
+        Rename and/or delete events in a single operation.
+
+        At least one of `rename` or `delete` must be provided. Events listed in both
+        `rename` and `delete` are deleted.
+
+        Parameters
+        ----------
+        rename : dict, optional
+            Mapping of `{old_name: new_name}`. Events whose current name is a key are
+            renamed to the corresponding value.
+        delete : list of str, optional
+            Event names to remove from the eventstream entirely.
+
+        Examples
+        --------
+            stream.edit_events(rename={"old_checkout": "checkout"}, delete=["system_ping"])
+            stream.edit_events(delete=["debug_event", "internal_event"])
+        """
         from hopscotch.data_processors.edit_events import EditEvents
         new_df, new_schema = EditEvents(rename=rename, delete=delete).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_rename_events")
     def rename_events(self, mapping: dict) -> "Eventstream":
+        """
+        Rename events using a mapping dict.
+
+        Events not present in `mapping` are left unchanged. To also delete events in
+        the same step, use `edit_events` instead.
+
+        Parameters
+        ----------
+        mapping : dict
+            Mapping of `{old_name: new_name}`.
+
+        Examples
+        --------
+            stream.rename_events({"old_checkout": "checkout", "cart_add": "add_to_cart"})
+        """
         from hopscotch.data_processors.rename_events import RenameEvents
         new_df, new_schema = RenameEvents(mapping).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_sample_paths")
     def sample_paths(self, sample_size, random_state=None, path_id_col=None) -> "Eventstream":
+        """
+        Randomly sample paths (and all their events).
+
+        Parameters
+        ----------
+        sample_size : int or float
+            Number of paths to keep (int), or a fraction of total paths in the range
+            `(0.0, 1.0]` (float). Passing `1.0` returns the eventstream unchanged.
+        random_state : int, optional
+            Seed for the random number generator; pass an integer for reproducible results.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+
+        Examples
+        --------
+            stream.sample_paths(1000)
+            stream.sample_paths(0.1, random_state=42)  # 10 % of paths
+        """
         from hopscotch.data_processors.sample_paths import SamplePaths
         new_df, new_schema = SamplePaths(sample_size=sample_size, random_state=random_state, path_id_col=path_id_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_split_sessions")
     def split_sessions(self, session_col="session_id", session_index_col="session_index", separator=None, start_event=None, end_event=None, timeout=None, path_id_col=None, event_col=None) -> "Eventstream":
+        """
+        Split each path into sub-sessions and add session ID and index columns.
+
+        At least one boundary criterion must be provided: `separator`,
+        `start_event` + `end_event`, or `timeout`. `separator` and
+        `start_event`/`end_event` are mutually exclusive; `timeout` may be combined
+        with either.
+
+        Parameters
+        ----------
+        session_col : str, default `"session_id"`
+            Name of the new column that holds the unique session identifier.
+        session_index_col : str, default `"session_index"`
+            Name of the new column that holds the 0-based session index within each path.
+        separator : str or list of str, optional
+            Event name(s) that mark a session boundary. The separator event starts a new
+            session; the separator row itself belongs to the new session.
+        start_event : str or list of str, optional
+            Event name(s) that mark the start of a session. Must be provided together
+            with `end_event`.
+        end_event : str or list of str, optional
+            Event name(s) that mark the end of a session. Must be provided together
+            with `start_event`.
+        timeout : int or float, optional
+            Inactivity gap in seconds. A new session starts when the gap between
+            consecutive events exceeds this threshold.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+        event_col : str, optional
+            Event column override; defaults to `schema.event_col`.
+
+        Examples
+        --------
+            stream.split_sessions(timeout=1800)
+            stream.split_sessions(separator="app_open")
+            stream.split_sessions(start_event="session_start", end_event="session_end")
+            stream.split_sessions(separator="app_open", timeout=3600)
+        """
         from hopscotch.data_processors.split_sessions import SplitSessions
         new_df, new_schema = SplitSessions(session_col=session_col, session_index_col=session_index_col, separator=separator, start_event=start_event, end_event=end_event, timeout=timeout, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)
 
     @_tracked("dp_truncate_paths")
     def truncate_paths(self, left: str, right: str, path_id_col=None, event_col=None) -> "Eventstream":
+        """
+        Trim each path to the window between two anchor events (inclusive).
+
+        For each path, the first occurrence of `left` and the first occurrence of `right`
+        that comes after `left` are found. Events outside this window are dropped. Paths
+        that do not contain both anchors in the correct order are removed entirely.
+
+        Parameters
+        ----------
+        left : str
+            Name of the event that marks the start of the window.
+        right : str
+            Name of the event that marks the end of the window.
+        path_id_col : str, optional
+            Path ID column override; defaults to `schema.path_col`.
+        event_col : str, optional
+            Event column override; defaults to `schema.event_col`.
+
+        Examples
+        --------
+            stream.truncate_paths(left="registration", right="purchase")
+        """
         from hopscotch.data_processors.truncate_paths import TruncatePaths
         new_df, new_schema = TruncatePaths(left=left, right=right, path_id_col=path_id_col, event_col=event_col).apply(self._df, self.schema)
         return Eventstream(new_df, asdict(new_schema), prepare=False)

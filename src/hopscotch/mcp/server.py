@@ -8,6 +8,7 @@ Usage in a Jupyter notebook:
 """
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import pathlib
@@ -19,8 +20,7 @@ from typing import Any
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
-if False:
-    from hopscotch.eventstream.eventstream import Eventstream
+from hopscotch.eventstream.eventstream import Eventstream
 
 
 def serve(
@@ -113,60 +113,11 @@ def _build_server(
         Parameters
         ----------
         preprocessors:
-            Ordered list of preprocessing steps. Each step is a dict with "type" and
-            step-specific arguments. Supported types:
-
-            {"type": "collapse_events", "repetitive": true}
-                Collapse consecutive identical events.
-
-            {"type": "filter_paths", "op": ">", "metric": "length", "value": 5}
-                Keep paths matching an AST condition.
-                op: ">" | ">=" | "<" | "<=" | "=" | "in" | "not in"
-                metric: "length" | "duration" | "has" | "event_count" | "matches" |
-                        "time_between" | "active_days"
-                value: number, bool, or list depending on metric
-                metric_args: optional dict (required for has/event_count/matches/time_between)
-                Examples:
-                  keep paths with purchase:
-                    {"op": "=", "metric": "has", "value": true,
-                     "metric_args": {"events": "purchase"}}
-                  keep paths longer than 5 steps:
-                    {"op": ">", "metric": "length", "value": 5}
-
-            {"type": "filter_events", "column": "platform", "values": ["mobile"]}
-                Keep only events where column is in values.
-
-            {"type": "truncate_paths", "left": "login", "right": "purchase"}
-                Trim each path to the window between two anchor events.
-
-            {"type": "rename_events", "mapping": {"old_name": "new_name"}}
-                Rename events.
-
-            {"type": "collapse_events", "event_groups": {"browse": ["catalog", "search"]}}
-                Merge event groups into a single representative event.
-
-            {"type": "sample_paths", "sample_size": 1000, "random_state": 42}
-                Random sample of paths.
-
-            {"type": "add_segment", "name": "funnel", "funnel_events": ["A", "B"]}
-                Create an N+1 level funnel segment.
-                Levels named after the last event reached in sequence:
-                  'out_of_funnel' — never reached A
-                  'A'             — reached A but not B
-                  'B'             — completed the funnel
-                Use diff=['funnel', 'A', 'B'] to compare dropped vs converted.
-                For a 3-step funnel ["A","B","C"] levels are: out_of_funnel, A, B, C.
-
-            {"type": "add_segment", "name": "period",
-             "values": [["timestamp", "<", "2024-01-20", "normal"],
-                        ["timestamp", ">", "2024-01-22", "normal"],
-                        ["anomaly"]]}
-                Label paths by time window. Each entry is [column, op, value, label];
-                the last entry is the ELSE fallback.
-                Use timestamp_col from describe() as column name.
-
-            {"type": "add_segment", "name": "...", "sql": "CASE WHEN ... END"}
-                Derive a segment column from a SQL expression (for complex conditions).
+            Ordered list of steps. Each step is {"type": "<name>", ...args}.
+            Available types: collapse_events, filter_paths, filter_events, truncate_paths,
+            rename_events, edit_events, add_events, add_segment, drop_segment, add_clusters,
+            url_events, sample_paths, split_sessions.
+            Call describe_tool("<type>") for full parameter reference before using any step.
 
         Returns
         -------
@@ -204,6 +155,46 @@ def _build_server(
             "n_events_total": len(df),
             "events":         sorted(df[s.event_col].astype(str).unique().tolist()),
         }, ensure_ascii=False)
+
+    @mcp.tool()
+    def playbook(scenario: str = "") -> str:
+        """
+        Return the canonical recipe for a named analysis scenario.
+        Call this when you recognise a pattern in the user's question but need
+        the step-by-step procedure. Do NOT improvise — look it up here first.
+
+        Pass "" (empty) to list all available scenarios.
+        """
+        return json.dumps(_PLAYBOOK.get(scenario.strip(), _playbook_index()), ensure_ascii=False)
+
+    @mcp.tool()
+    def describe_tool(tool: str = "") -> str:
+        """
+        Return full parameter documentation for a preprocessor type or internal tool.
+        Call this before using any preprocessor you are not 100% sure about —
+        do NOT guess parameters or read source files.
+
+        Pass "" (empty) to list all documented tools.
+
+        Preprocessors (use as {"type": "<name>", ...} in update_base_stream / local_preprocessors):
+          collapse_events  filter_paths   filter_events   truncate_paths
+          rename_events    edit_events    add_events      add_segment
+          drop_segment     add_clusters   url_events      sample_paths
+          split_sessions
+
+        Reference topics:
+          report_links   (anchor link syntax for analysis text)
+        """
+        t = tool.strip()
+        if not t:
+            return json.dumps(_tool_docs_index(), ensure_ascii=False)
+        if t in _STATIC_TOOL_DOCS:
+            return json.dumps({"topic": t, "docs": _STATIC_TOOL_DOCS[t]}, ensure_ascii=False)
+        method = getattr(Eventstream, t, None)
+        doc = inspect.getdoc(method) if method and callable(method) else None
+        if doc:
+            return json.dumps({"preprocessor": t, "docs": doc}, ensure_ascii=False)
+        return json.dumps({"error": f"Unknown tool {t!r}.", **_tool_docs_index()}, ensure_ascii=False)
 
     @mcp.tool()
     def describe() -> str:
@@ -762,6 +753,79 @@ def _df_to_list(df: Any) -> list:
                 cells.append(v)
         rows.append(cells)
     return rows
+
+
+# ── playbook / describe_tool ───────────────────────────────────────────────────
+
+def _load_playbook() -> dict[str, str]:
+    """Parse playbook.md into {scenario_key: content_string}."""
+    md = (pathlib.Path(__file__).parent / "playbook.md").read_text(encoding="utf-8")
+    sections: dict[str, str] = {}
+    current_key: str | None = None
+    buf: list[str] = []
+    for line in md.splitlines():
+        if line.startswith("## "):
+            if current_key:
+                sections[current_key] = "\n".join(buf).strip()
+            current_key = line[3:].strip()
+            buf = []
+        elif not line.startswith("<!--"):
+            buf.append(line)
+    if current_key:
+        sections[current_key] = "\n".join(buf).strip()
+    return sections
+
+
+_PLAYBOOK: dict[str, str] = _load_playbook()
+
+# Static reference topics that don't map to an Eventstream method
+_STATIC_TOOL_DOCS: dict[str, str] = {
+    "report_links": """\
+Anchor link syntax for the analysis text passed to export_report().
+
+  [Tab:event]           open tab, focus node in transition graph
+  [Tab:src->tgt]        open tab, animate edge (marching ants)
+  [Tab:event@step]      open tab, scroll to step-matrix cell; step_window expands automatically
+  [Tab:metric@segment]  open tab, highlight segment overview cell
+  [Tab:segment_value]   open tab, highlight segment overview column
+  [Tab:]                open tab only, no focus
+  [Tab Name]            bare tab name — same as [Tab Name:]
+  [event]               focus event/edge in the currently active tab
+
+Rule: every cited number must be followed by an anchor link to its source.
+      Use edge links [Tab:src->tgt] for transition percentages — NEVER node-only links.
+
+Examples:
+  '**[Flow:add_to_cart->purchase]** reaches 38% conversion'
+  'Mobile shows **12%** [Segments:mobile], desktop **31%** [Segments:desktop]'
+  '67% of sessions exit at **[Funnel:checkout@4]**'
+  'See [Overview:] for the full KPI comparison'""",
+}
+
+
+def _playbook_index() -> dict:
+    return {
+        "usage": "Call playbook(scenario) with one of the keys below.",
+        "scenarios": sorted(_PLAYBOOK.keys()),
+    }
+
+
+def _tool_docs_index() -> dict:
+    preprocessors = sorted(
+        m for m in dir(Eventstream)
+        if not m.startswith("_") and callable(getattr(Eventstream, m))
+        and inspect.getdoc(getattr(Eventstream, m))
+        and m in {
+            "filter_events", "filter_paths", "add_segment", "collapse_events",
+            "truncate_paths", "rename_events", "edit_events", "add_events",
+            "drop_segment", "add_clusters", "url_events", "sample_paths", "split_sessions",
+        }
+    )
+    return {
+        "usage": "Call describe_tool(topic) with one of the keys below.",
+        "preprocessors": preprocessors,
+        "reference_topics": sorted(_STATIC_TOOL_DOCS.keys()),
+    }
 
 
 def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str = "") -> str:

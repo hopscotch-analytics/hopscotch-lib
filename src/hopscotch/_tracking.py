@@ -1,4 +1,5 @@
 """PostHog analytics tracking for hopscotch-analytics."""
+import functools
 import json
 import os
 import pathlib
@@ -143,6 +144,7 @@ def tracked(event_name: str, condition=None, props_fn=None):
                Tracking fires after the method succeeds so props_fn has access to the result.
     """
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             global _depth
             skip = _depth > 0 or (condition is not None and not condition(args[0]))
