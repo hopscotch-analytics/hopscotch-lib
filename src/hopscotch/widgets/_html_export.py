@@ -30,6 +30,7 @@ def write_report_html(
     title: str,
     widgets: list[dict],
     analysis: str | None = None,
+    data_sources_html: str = "",
 ) -> None:
     """Export a multi-widget report HTML file.
 
@@ -59,6 +60,8 @@ def write_report_html(
     }
     widgets_json = json.dumps(widgets, ensure_ascii=False)
     analysis_html = render_analysis(analysis, label_map=label_map) if analysis else ""
+    if data_sources_html:
+        analysis_html = data_sources_html + "\n" + analysis_html
     html = (_HTML_TEMPLATE_REPORT
             .replace("{{TITLE}}",         title)
             .replace("{{WIDGETS_JSON}}",   widgets_json)
@@ -123,13 +126,25 @@ def render_analysis(text: str, label_map: dict | None = None) -> str:
             # Allow empty ref after colon: [Tab Name:] — just activate tab
             s = re.sub(r"\[([^:\]]+):(.*?)\]", _tab_link, s)
 
-        # [event] — focus in active tab
-        s = re.sub(
-            r"\[([^\]]+)\]",
-            r'<a href="javascript:void(0)" class="node-link"'
-            r' onclick="return focusLink(this)" data-node="\1">\1</a>',
-            s,
-        )
+        # [text] — if text matches a tab label, activate that tab;
+        #          otherwise focus as event/edge in the active tab
+        def _bare_link(m: re.Match) -> str:
+            ref = m.group(1)
+            if label_map and ref in label_map:
+                entry  = label_map[ref]
+                tab_id = entry["tab_id"] if isinstance(entry, dict) else entry
+                return (
+                    f'<a href="javascript:void(0)" class="node-link"'
+                    f' onclick="return focusLink(this)"'
+                    f' data-tab="{tab_id}"'
+                    f' title="Open: {_html_mod.escape(ref)}">'
+                    f'{_html_mod.escape(ref)}</a>'
+                )
+            return (
+                f'<a href="javascript:void(0)" class="node-link"'
+                f' onclick="return focusLink(this)" data-node="{ref}">{ref}</a>'
+            )
+        s = re.sub(r"\[([^\]]+)\]", _bare_link, s)
         s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
         s = re.sub(r"\*(.+?)\*",     r"<em>\1</em>", s)
         s = re.sub(r"`(.+?)`",       r"<code>\1</code>", s)

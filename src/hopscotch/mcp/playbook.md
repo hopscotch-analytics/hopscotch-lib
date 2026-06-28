@@ -31,6 +31,21 @@
 
 **Values format:** each entry is `[column, op, value, label]`; the last entry `["anomaly"]` is the ELSE fallback.
 
+**Concrete example** — spike on Jan 20–22 2024, timestamp column is `timestamp`:
+```json
+{
+  "type": "add_segment",
+  "name": "period",
+  "values": [
+    ["timestamp", "<",  "2024-01-20", "normal"],
+    ["timestamp", ">",  "2024-01-22", "normal"],
+    ["anomaly"]
+  ]
+}
+```
+This labels every event row: those outside Jan 20–22 get `"normal"`, the rest get `"anomaly"`.
+Use `timestamp_col` from `describe()` as the column name.
+
 
 ## conversion_dropoff
 
