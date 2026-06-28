@@ -45,6 +45,17 @@ def serve(
             })
     port:
         HTTP port for the SSE transport (default 8765).
+
+    Notes
+    -----
+    **Prompt caching (programmatic agents):** when calling the Anthropic API
+    directly, add ``cache_control`` to the system message and tool definitions
+    to cache the large static prefix::
+
+        system=[{"type": "text", "text": instructions,
+                 "cache_control": {"type": "ephemeral"}}]
+
+    Claude Desktop handles caching automatically.
     """
     mcp = _build_server(stream, context or {}, port=port, notebook_dir=os.getcwd())
     thread = threading.Thread(
@@ -82,6 +93,9 @@ def _build_server(
     # Active stream — starts as the original, replaced by update_base_stream.
     # Use a list so nested functions can rebind it.
     _active: list = [stream]
+
+    # Events flagged as important in context — prioritised in compact summaries.
+    _context_events: set = set(context.get("events", {}).keys())
 
     @mcp.tool()
     def update_base_stream(preprocessors: list) -> str:
@@ -283,18 +297,11 @@ def _build_server(
         tab_id = f"tab-{len(_pending)}"
         _pending.append({"label": label, "data": data})
 
-        # Return matrix data for Claude to analyse
         result_raw = json.loads(widget.result or "{}")
-        out: dict = {
-            "tab_id":  tab_id,
-            "label":   label,
-            "events":  result_raw.get("events", []),
-            "values":  result_raw.get("values", []),
-        }
-        if result_raw.get("group1"):
-            out["group1"] = result_raw["group1"]
-            out["group2"] = result_raw["group2"]
-        return json.dumps(out, ensure_ascii=False)
+        summary = _transition_graph_summary(result_raw, _context_events, edge_weight)
+        summary["tab_id"] = tab_id
+        summary["label"]  = label
+        return json.dumps(summary, ensure_ascii=False)
 
     @mcp.tool()
     def add_step_matrix(
@@ -356,12 +363,10 @@ def _build_server(
         _pending.append({"label": label, "data": data})
 
         result_raw = json.loads(widget.result or "{}")
-        return json.dumps({
-            "tab_id":        tab_id,
-            "label":         label,
-            "matrices":      result_raw.get("matrices", []),
-            "event_counts":  result_raw.get("event_counts", {}),
-        }, ensure_ascii=False)
+        summary = _step_matrix_summary(result_raw, _context_events)
+        summary["tab_id"] = tab_id
+        summary["label"]  = label
+        return json.dumps(summary, ensure_ascii=False)
 
     @mcp.tool()
     def add_segment_overview(
@@ -455,13 +460,10 @@ def _build_server(
         _pending.append({"label": label, "data": data})
 
         result_raw = json.loads(widget.result or "{}")
-        return json.dumps({
-            "tab_id":   tab_id,
-            "label":    label,
-            "metrics":  result_raw.get("metrics", []),
-            "segments": result_raw.get("segments", []),
-            "values":   result_raw.get("values", []),
-        }, ensure_ascii=False)
+        summary = _segment_overview_summary(result_raw, _context_events)
+        summary["tab_id"] = tab_id
+        summary["label"]  = label
+        return json.dumps(summary, ensure_ascii=False)
 
     @mcp.tool()
     def export_report(
@@ -592,6 +594,151 @@ def _apply_preprocessors(stream: Any, preprocessors: list) -> Any:
     return stream
 
 
+def _transition_graph_summary(result_raw: dict, context_events: set, edge_weight: str, top_n: int = 25) -> dict:
+    """Compact transition graph summary: top-N edges, context events prioritised."""
+    events = result_raw.get("events", [])
+    values = result_raw.get("values", [])
+    is_diff = bool(result_raw.get("group1"))
+    n = len(events)
+    if n == 0 or not values:
+        return {"n_events": 0, "top_edges": []}
+
+    edges: list[tuple] = []
+    for i, src in enumerate(events):
+        for j, tgt in enumerate(events):
+            try:
+                w = values[i][j]
+            except IndexError:
+                continue
+            if w is not None and w != 0:
+                priority = src in context_events or tgt in context_events
+                edges.append((src, tgt, w, priority))
+
+    if is_diff:
+        # Separate top increases / decreases; enrich with per-group values
+        g1 = result_raw.get("group1", {})
+        g2 = result_raw.get("group2", {})
+        g1_ev, g1_val = g1.get("events", events), g1.get("values", [])
+        g2_ev, g2_val = g2.get("events", events), g2.get("values", [])
+
+        def _gval(ev_list: list, val_matrix: list, src: str, tgt: str):
+            try:
+                return round(val_matrix[ev_list.index(src)][ev_list.index(tgt)] or 0, 4)
+            except (ValueError, IndexError):
+                return None
+
+        def _fmt(e: tuple) -> dict:
+            d: dict = {"from": e[0], "to": e[1], "diff": round(e[2], 4)}
+            g1v = _gval(g1_ev, g1_val, e[0], e[1])
+            g2v = _gval(g2_ev, g2_val, e[0], e[1])
+            if g1v is not None: d["g1"] = g1v
+            if g2v is not None: d["g2"] = g2v
+            return d
+
+        pos = sorted([e for e in edges if e[2] > 0],  key=lambda e: (not e[3], -e[2]))[:top_n // 2]
+        neg = sorted([e for e in edges if e[2] < 0],  key=lambda e: (not e[3],  e[2]))[:top_n // 2]
+        return {
+            "n_events":       n,
+            "top_increases":  [_fmt(e) for e in pos],
+            "top_decreases":  [_fmt(e) for e in neg],
+            "note": f"Top {len(pos)+len(neg)} diff edges of {len(edges)} non-zero. Full graph in tab.",
+        }
+    else:
+        shown = sorted(edges, key=lambda e: (not e[3], -abs(e[2])))[:top_n]
+        return {
+            "n_events":   n,
+            "edge_weight": edge_weight,
+            "top_edges":  [{"from": s, "to": t, "weight": round(w, 4)} for s, t, w, _ in shown],
+            "note": f"Top {len(shown)} of {len(edges)} non-zero edges. Full graph in tab.",
+        }
+
+
+def _step_matrix_summary(result_raw: dict, context_events: set, top_per_step: int = 5) -> dict:
+    """Compact step matrix: top events per step + full rows for context events."""
+    matrices = result_raw.get("matrices", [])
+    if not matrices:
+        return {"note": "no data"}
+
+    m         = matrices[0]
+    events    = m.get("events", [])
+    columns   = m.get("columns", [])
+    values    = m.get("values", [])
+    is_diff   = bool(m.get("group1"))
+
+    if not events or not columns:
+        return {"n_events": 0}
+
+    by_step: dict = {}
+    for ci, col in enumerate(columns):
+        step_vals: list = []
+        for ri, ev in enumerate(events):
+            try:
+                v = values[ri][ci]
+                if v is not None:
+                    step_vals.append((abs(v), v, ev))
+            except IndexError:
+                pass
+        step_vals.sort(reverse=True)
+        by_step[str(col)] = [{"event": ev, "value": round(v, 4)} for _, v, ev in step_vals[:top_per_step]]
+
+    ctx_rows: dict = {}
+    for ri, ev in enumerate(events):
+        if ev in context_events and ri < len(values):
+            row = {str(col): round(values[ri][ci], 4)
+                   for ci, col in enumerate(columns)
+                   if ri < len(values) and ci < len(values[ri]) and values[ri][ci] is not None}
+            if row:
+                ctx_rows[ev] = row
+
+    result: dict = {
+        "n_events": len(events),
+        "steps":    columns,
+        "top_events_per_step": by_step,
+    }
+    if ctx_rows:
+        result["context_event_rows"] = ctx_rows
+    note = f"Top {top_per_step} events per step shown."
+    if is_diff:
+        note += " Values are differences (g2 − g1)."
+    result["note"] = note + " Full matrix in tab."
+    return result
+
+
+def _segment_overview_summary(result_raw: dict, context_events: set) -> dict:
+    """Compact segment overview: full metrics table + highlight rows with large spread."""
+    metrics  = result_raw.get("metrics",  [])
+    segments = result_raw.get("segments", [])
+    values   = result_raw.get("values",   [])
+
+    if not metrics or not segments or not values:
+        return {"note": "no data"}
+
+    # Attach spread (max − min) to each metric row so agent knows what's interesting
+    rows = []
+    for mi, metric in enumerate(metrics):
+        if mi >= len(values):
+            continue
+        row_vals = [v for v in values[mi] if v is not None]
+        spread = round(max(row_vals) - min(row_vals), 4) if len(row_vals) >= 2 else 0.0
+        row: dict = {"metric": metric, "spread": spread}
+        for si, seg in enumerate(segments):
+            if si < len(values[mi]) and values[mi][si] is not None:
+                row[seg] = round(values[mi][si], 4)
+        # Flag if this metric involves a context event
+        is_context = any(ev in metric for ev in context_events)
+        row["_context"] = is_context
+        rows.append(row)
+
+    # Sort: context rows first, then by spread descending
+    rows.sort(key=lambda r: (not r.pop("_context"), -r["spread"]))
+
+    return {
+        "segments": segments,
+        "metrics_table": rows,
+        "note": "Rows sorted by relevance (context events first, then by spread across segments).",
+    }
+
+
 def _df_to_matrix(df: Any) -> dict:
     return {
         "events":  df.index.tolist(),
@@ -655,12 +802,12 @@ def _system_instructions(stream: "Eventstream", context: dict, notebook_dir: str
         "   for the entire analysis session (e.g. remove noise events, filter short paths).",
         "   Ask the user for confirmation before calling — it resets the analysis context.",
         "   All subsequent add_* calls use this preprocessed stream automatically.",
-        "3. Call add_transition_graph(), add_step_matrix(), and/or add_segment_overview() one or more times.",
-        "   Each call computes a visualisation, returns its data for analysis,",
-        "   and registers it as a tab (tab-0, tab-1, …) in the pending report.",
-        "   You can add multiple visualisations of the same type with different",
-        "   parameters (e.g. proba_out graph + time_median graph).",
-        "3. Call export_report() with your full written analysis.",
+        "3. Call add_transition_graph(), add_step_matrix(), and/or add_segment_overview().",
+        "   Each call returns a compact summary for analysis and registers a tab in the report.",
+        "   The full interactive visualisation is always embedded in the HTML report.",
+        "   PARALLELISM: add_* calls are independent — if your client supports parallel",
+        "   tool calls, issue them simultaneously to save time.",
+        "4. Call export_report() with your full written analysis.",
         "   The HTML file will contain all added tabs and the analysis panel.",
         "",
         "## Analysis text",
