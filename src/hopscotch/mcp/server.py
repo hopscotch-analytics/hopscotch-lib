@@ -15,11 +15,13 @@ import pathlib
 import re
 import tempfile
 import threading
+from functools import wraps
 from typing import Any
 
 import pandas as pd
 from mcp.server.fastmcp import FastMCP
 
+from hopscotch._tracking import _caller_type as _tracking_caller_type
 from hopscotch.eventstream.eventstream import Eventstream
 
 
@@ -86,6 +88,19 @@ def _build_server(
         port=port,
     )
 
+    def _tool():
+        """@mcp.tool() that sets caller='mcp' in the tracking context."""
+        def decorator(fn):
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                token = _tracking_caller_type.set("mcp")
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    _tracking_caller_type.reset(token)
+            return mcp.tool()(wrapper)
+        return decorator
+
     # Report builder state — accumulates widgets across add_* calls,
     # reset by export_report.
     _pending: list[dict] = []
@@ -100,7 +115,7 @@ def _build_server(
     # Preprocessors applied via update_base_stream (for data notes in report).
     _base_preprocessors: list = []
 
-    @mcp.tool()
+    @_tool()
     def update_base_stream(preprocessors: list) -> str:
         """
         Apply preprocessing to the original eventstream and set it as the active
@@ -142,7 +157,7 @@ def _build_server(
             "events":         sorted(df[s.event_col].astype(str).unique().tolist()),
         }, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def reset_base_stream() -> str:
         """
         Reset the active stream to the original eventstream passed to serve().
@@ -161,7 +176,7 @@ def _build_server(
             "events":         sorted(df[s.event_col].astype(str).unique().tolist()),
         }, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def playbook(scenario: str = "") -> str:
         """
         Return the canonical recipe for a named analysis scenario.
@@ -172,7 +187,7 @@ def _build_server(
         """
         return json.dumps(_PLAYBOOK.get(scenario.strip(), _playbook_index()), ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def describe_tool(tool: str = "") -> str:
         """
         Return full parameter documentation for a preprocessor type or internal tool.
@@ -201,7 +216,7 @@ def _build_server(
             return json.dumps({"preprocessor": t, "docs": doc}, ensure_ascii=False)
         return json.dumps({"error": f"Unknown tool {t!r}.", **_tool_docs_index()}, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def describe() -> str:
         """Return schema, event list, unique path counts and available segments.
         Reflects the current active stream (after any update_base_stream calls)."""
@@ -230,7 +245,7 @@ def _build_server(
             result["segment_descriptions"] = context["segments"]
         return json.dumps(result, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def add_transition_graph(
         label: str,
         edge_weight: str = "proba_out",
@@ -300,7 +315,7 @@ def _build_server(
         summary["label"]  = label
         return json.dumps(summary, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def add_step_matrix(
         label: str,
         max_steps: int = 10,
@@ -366,7 +381,7 @@ def _build_server(
         summary["label"]  = label
         return json.dumps(summary, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def add_segment_overview(
         label: str,
         segment_col: str,
@@ -464,7 +479,7 @@ def _build_server(
         summary["label"]  = label
         return json.dumps(summary, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def check_analysis(analysis: str) -> str:
         """
         Validate analysis text BEFORE calling export_report.
@@ -502,7 +517,7 @@ def _build_server(
             ),
         }, ensure_ascii=False)
 
-    @mcp.tool()
+    @_tool()
     def export_report(
         title: str = "Analysis Report",
         analysis: str | None = None,
