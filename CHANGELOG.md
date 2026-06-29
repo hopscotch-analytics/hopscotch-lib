@@ -7,8 +7,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [0.6.0] - 2026-06-29
 
-## [0.6.0] - 2026-06-29
-
 ### Added
 - **MCP server** (`hopscotch.mcp.serve()`) — local MCP server exposing the eventstream to Claude and other MCP clients over SSE. Tools: `describe`, `add_transition_graph`, `add_step_matrix`, `add_segment_overview`, `update_base_stream`, `reset_base_stream`, `export_report`, `check_analysis`, `playbook`, `describe_tool`
 - **`playbook()` tool** — canonical step-by-step recipes for named analysis scenarios (temporal anomaly, conversion drop-off, segment comparison, etc.) loaded from `playbook.md`
