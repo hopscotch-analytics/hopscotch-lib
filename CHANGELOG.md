@@ -5,6 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-29
+
+## [0.6.0] - 2026-06-29
+
+### Added
+- **MCP server** (`hopscotch.mcp.serve()`) — local MCP server exposing the eventstream to Claude and other MCP clients over SSE. Tools: `describe`, `add_transition_graph`, `add_step_matrix`, `add_segment_overview`, `update_base_stream`, `reset_base_stream`, `export_report`, `check_analysis`, `playbook`, `describe_tool`
+- **`playbook()` tool** — canonical step-by-step recipes for named analysis scenarios (temporal anomaly, conversion drop-off, segment comparison, etc.) loaded from `playbook.md`
+- **`describe_tool()` tool** — full parameter docs for any preprocessor type, callable from the agent before use
+- **`update_base_stream()` / `reset_base_stream()`** — agent-controlled baseline preprocessing for the whole session; `local_preprocessors` in `add_*` tools for one-off per-tab transforms
+- **`check_analysis()` tool** — validates analysis text before export: detects unlinked numbers, plain-text edges, edge code spans
+- **Multi-widget HTML report** (`export_report()`) — split-pane layout with resizable splitter, tab bar, full-markdown analysis panel, clickable `[tab:ref]` links that activate tabs and focus/animate elements
+- **Edge marching-ants animation** in report — `[tab:src->tgt]` links animate the edge with dashed marching ants until canvas click
+- **Step-matrix cell links** in report — `[tab:event@step]` scrolls to the cell and auto-expands `step_window` if needed
+- **Data sources `<details>` block** in report — collapsible section showing the Python preprocessing code that produced each tab
+- **`add_segment(funnel_events=...)`** — N+1 level funnel segment via DuckDB window functions; levels named after the last funnel step reached
+- **`daily_states()` data processor** — adds `active`/`dormant`/`churned` state events per day per path; available as both `Eventstream` method and MCP preprocessor type
+- **`caller_type` tracking property** — PostHog events now include `caller_type="mcp"` or `caller_type="user"` via a `ContextVar` set inside MCP tool calls
+- **Static HTML export** — recalculation controls (edge weight, path column, diff, path pattern, funnel steps, segment column, metrics) are disabled in `renderStatic` mode; client-side controls (step window, event count filter) remain interactive
+
+### Fixed
+- `check_analysis` now detects edges written as inline code spans (`` `A → B` ``) and plain-text edges not inside link brackets
+- `_df_to_list`: `pd.NaT` values in `time_median`/`time_q95` columns serialised as `null` instead of raising
+- `segment_overview` metric row focus: prefix match (`has_purchase` finds `has_purchase_mean`); target column scrolls into view horizontally
+- `event_count` metric `metric_args` key unified to `"events"` across Python and JS (was `"event"` in some paths)
+
 ## [0.5.1] - 2026-06-26
 
 ### Changed
