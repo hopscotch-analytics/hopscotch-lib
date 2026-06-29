@@ -5,7 +5,7 @@ Supports metrics:
 - length - number of steps (events)
 - duration - duration in seconds between first and last event
 - event_count - event count for specific event(s)
-  - event: event name (string or list of strings); list of events returns multiple metrics
+  - events: event name (string or list of strings); list of events returns multiple metrics
 - has - event presence (0/1) for specific event(s)
   - events: event name (string or list of strings); list of events returns multiple metrics
 - time_between - time in seconds between first occurrences of two events
@@ -192,23 +192,22 @@ class MetricConfig:
                 "original": config_dict,
             }
         elif metric == "event_count":
-            event = metric_args.get("event")
-            if not event:
+            events = metric_args.get("events")
+            if not events:
                 raise InvalidMetricConfigError(
-                    "'event_count' metric requires 'event' in metric_args"
+                    "'event_count' metric requires 'events' in metric_args"
                 )
 
-            if isinstance(event, str):
-                events = [event]
-            elif isinstance(event, list):
-                if len(event) == 0:
+            if isinstance(events, str):
+                events = [events]
+            elif isinstance(events, list):
+                if len(events) == 0:
                     raise InvalidMetricConfigError(
-                        "'event_count' metric requires non-empty 'event' list"
+                        "'event_count' metric requires non-empty 'events' list"
                     )
-                events = event
             else:
                 raise InvalidMetricConfigError(
-                    "'event_count' metric 'event' must be string or list"
+                    "'event_count' metric 'events' must be string or list"
                 )
             return {
                 "type": "event_count",
@@ -332,10 +331,10 @@ class MetricBuilder:
         metric_args = metric.get("metric_args", {})
 
         if metric_name == "event_count":
-            event = metric_args.get("event")
+            event = metric_args.get("events")
             if not event:
                 raise InvalidMetricConfigError(
-                    "'event_count' metric requires 'event' in metric_args"
+                    "'event_count' metric requires 'events' in metric_args"
                 )
             events_to_check = [event] if isinstance(event, str) else event
             for e in events_to_check:

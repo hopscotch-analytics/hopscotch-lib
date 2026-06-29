@@ -1,4 +1,6 @@
 """PostHog analytics tracking for hopscotch-analytics."""
+import contextvars
+import functools
 import json
 import os
 import pathlib
@@ -119,6 +121,12 @@ def _no_track_requested() -> bool:
     return False
 
 
+# ── caller context ─────────────────────────────────────────────────────────────
+
+# Set to "mcp" inside MCP tool calls; defaults to "user" everywhere else.
+_caller_type: contextvars.ContextVar[str] = contextvars.ContextVar("hopscotch_caller_type", default="user")
+
+
 # ── public API ─────────────────────────────────────────────────────────────────
 
 _depth = 0  # global call depth counter — suppresses nested tracked calls
@@ -128,7 +136,7 @@ def track(event: str, properties: dict | None = None) -> None:
     """Fire-and-forget PostHog event. Never raises."""
     if _ph is None or _no_track_requested():
         return
-    props = {**_BASE_PROPS, **(properties or {})}
+    props = {**_BASE_PROPS, "caller_type": _caller_type.get(), **(properties or {})}
     try:
         _ph.capture(distinct_id=_DISTINCT_ID, event=event, properties=props)
     except Exception:
@@ -143,6 +151,7 @@ def tracked(event_name: str, condition=None, props_fn=None):
                Tracking fires after the method succeeds so props_fn has access to the result.
     """
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             global _depth
             skip = _depth > 0 or (condition is not None and not condition(args[0]))

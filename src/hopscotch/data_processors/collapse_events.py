@@ -19,7 +19,6 @@ class CollapseEvents(DataProcessor):
     repetitive: bool | List[str] | None
     event_groups: List[Dict[str, Any]] | None
     event_from_col: str | None
-    daily_states: Dict[str, Any] | None
     session_id_col: str | None
     session_type_col: str | None
     agg: Dict[str, str]
@@ -31,7 +30,6 @@ class CollapseEvents(DataProcessor):
         repetitive: bool | List[str] | None = None,
         event_groups: List[Dict[str, Any]] | None = None,
         event_from_col: str | None = None,
-        daily_states: Dict[str, Any] | None = None,
         session_id_col: str | None = None,
         session_type_col: str | None = None,
         agg: Dict[str, str] | None = None,
@@ -41,7 +39,6 @@ class CollapseEvents(DataProcessor):
         self.repetitive = repetitive
         self.event_groups = event_groups
         self.event_from_col = event_from_col
-        self.daily_states = daily_states
         self.session_id_col = session_id_col
         self.session_type_col = session_type_col
         self.agg = agg or {}
@@ -53,13 +50,12 @@ class CollapseEvents(DataProcessor):
             self.repetitive is not None,
             bool(self.event_groups),
             self.event_from_col is not None,
-            bool(self.daily_states),
             self.session_id_col is not None,
         ]
         if sum(modes) != 1:
             raise PreprocessingConfigError(
                 PROCESSOR_NAME,
-                "Provide exactly one of: repetitive, event_groups, event_from_col, daily_states, session_id_col",
+                "Provide exactly one of: repetitive, event_groups, event_from_col, session_id_col",
             )
 
         if self.session_id_col is not None and self.session_type_col is None:
@@ -107,10 +103,8 @@ class CollapseEvents(DataProcessor):
                 result = self._collapse_group(result, schema, path_id_col, event_col, group)
         elif self.event_from_col is not None:
             return self._collapse_by_col(df, schema, path_id_col, event_col)
-        elif self.session_id_col is not None:
-            return self._collapse_by_session_type(df, schema, path_id_col, event_col)
         else:
-            result = self._collapse_daily_states(df, schema, path_id_col, event_col)
+            return self._collapse_by_session_type(df, schema, path_id_col, event_col)
 
         for col in schema.event_cols + schema.segment_cols:
             if col in result.columns:
@@ -469,111 +463,6 @@ class CollapseEvents(DataProcessor):
 
         return result, schema
 
-    def _collapse_daily_states(
-        self,
-        df: pd.DataFrame,
-        schema: EventstreamSchema,
-        path_id_col: str,
-        event_col: str,
-    ) -> pd.DataFrame:
-        timestamp_col = schema.timestamp
-        event_type_col = schema.event_type
-        collapsed_event_type = EventTypes().COLLAPSED_EVENT.type
-        active_events = (self.daily_states or {}).get("active_events", [])
-        max_dormant_days = (self.daily_states or {}).get("max_dormant_days", 30)
-        if active_events:
-            active_events = json.dumps(active_events)[1:-1]
-            is_active_today = f"(SUM(CASE WHEN {event_col} IN ({active_events}) THEN 1 ELSE 0 END) > 0)"
-        else:
-            is_active_today = "TRUE"
 
-        exclude = {path_id_col, schema.event_col, schema.event_type}
-        agg_exprs = self._session_agg_exprs(df, self.agg, exclude, timestamp_col)
-        agg_chunk = (", " + ", ".join(agg_exprs)) if agg_exprs else ""
-
-        other_path_cols = [c for c in schema.path_cols if c != path_id_col]
-        other_path_cols_chunk = ", ".join([f"NULL AS {c}" for c in other_path_cols])
-        if other_path_cols_chunk:
-            other_path_cols_chunk = f", {other_path_cols_chunk}"
-
-        special_cols = schema.segment_cols + schema.custom_cols
-        special_cols_chunk = ", ".join([
-            f"COALESCE({c}, LAST_VALUE({c} IGNORE NULLS) OVER (PARTITION BY {path_id_col} ORDER BY {timestamp_col} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)) AS {c}"
-            for c in special_cols
-        ])
-
-        exclude_cols = (
-            ["active_today", "last_active", "had_week", "had_month", schema.index, schema.subindex]
-            + other_path_cols
-            + special_cols
-        )
-
-        query = f"""
-        WITH base AS (
-            SELECT *, CAST({timestamp_col} AS DATE) AS day
-            FROM df
-        ),
-        dataset_end AS (
-            SELECT MAX(day) AS dataset_end FROM base
-        ),
-        per_date AS (
-            SELECT
-                {path_id_col},
-                day,
-                {is_active_today} AS active_today
-                {agg_chunk}
-            FROM base
-            GROUP BY {path_id_col}, day
-        ),
-        path_bounds AS (
-            SELECT
-                b.{path_id_col},
-                MIN(b.day) AS start_day,
-                LEAST(MAX(b.day) + INTERVAL {max_dormant_days} DAY, ANY_VALUE(de.dataset_end)) AS end_day
-            FROM base b
-            CROSS JOIN dataset_end de
-            GROUP BY b.{path_id_col}
-        ),
-        cal AS (
-            SELECT pb.{path_id_col}, day
-            FROM path_bounds AS pb,
-            LATERAL (SELECT * FROM range(start_day, end_day + INTERVAL 1 DAY, INTERVAL 1 DAY)) AS r(day)
-        ),
-        states AS (
-            SELECT
-                cal.{path_id_col},
-                cal.day as {timestamp_col},
-                p.* EXCLUDE ({path_id_col}, day, {timestamp_col}, active_today),
-                COALESCE(p.active_today, FALSE) AS active_today,
-                (SELECT MAX(d2.day) FROM per_date d2 WHERE d2.{path_id_col} = cal.{path_id_col} AND d2.day < cal.day AND d2.active_today) AS last_active,
-                EXISTS(SELECT 1 FROM per_date d3 WHERE d3.{path_id_col} = cal.{path_id_col} AND d3.day < cal.day AND d3.day >= cal.day - INTERVAL 7 DAY AND d3.active_today) AS had_week,
-                EXISTS(SELECT 1 FROM per_date d4 WHERE d4.{path_id_col} = cal.{path_id_col} AND d4.day < cal.day AND d4.day >= cal.day - INTERVAL 30 DAY AND d4.active_today) AS had_month
-            FROM cal
-            LEFT JOIN per_date p USING ({path_id_col}, day)
-        )
-        SELECT * EXCLUDE ({json.dumps(exclude_cols)[1:-1]})
-            {other_path_cols_chunk},
-            CASE
-                WHEN active_today THEN
-                    CASE
-                        WHEN last_active IS NULL THEN 'new'
-                        WHEN had_week THEN 'current'
-                        WHEN had_month THEN 'reactivated'
-                        ELSE 'resurrected'
-                    END
-                ELSE
-                    CASE
-                        WHEN had_week THEN 'at_risk_wau'
-                        WHEN had_month THEN 'at_risk_mau'
-                        ELSE 'dormant'
-                    END
-            END AS {event_col},
-            '{collapsed_event_type}' AS {event_type_col},
-            1 as {schema.subindex},
-            ROW_NUMBER() OVER (PARTITION BY {path_id_col} ORDER BY {timestamp_col}, {schema.subindex}) AS {schema.index},
-            {special_cols_chunk}
-        FROM states
-        ORDER BY {path_id_col}, {timestamp_col}, {schema.subindex}
-        """
-        res = duckdb.query(query).df()
-        return res
+# Module-level alias so daily_states.py can import this without depending on the class
+_session_agg_exprs = CollapseEvents._session_agg_exprs

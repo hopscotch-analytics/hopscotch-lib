@@ -197,7 +197,7 @@ class TestSegmentOverview:
         result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
-                {"metric": "event_count", "metric_args": {"event": "checkout"}, "agg": "mean"},
+                {"metric": "event_count", "metric_args": {"events": "checkout"}, "agg": "mean"},
             ],
         )
 
@@ -563,7 +563,7 @@ class TestSegmentOverview:
         result = stream.segment_overview_data(
             segment_col="segment",
             metrics_config=[
-                {"metric": "event_count", "metric_args": {"event": ["click", "scroll"]}, "agg": "mean"},
+                {"metric": "event_count", "metric_args": {"events": ["click", "scroll"]}, "agg": "mean"},
             ],
         )
 
@@ -886,7 +886,7 @@ class TestMetricDistribution:
         result = SegmentOverview(stream).metric_distribution(
             segment_col="segment",
             segment_value="segment_1",
-            metric={"metric": "event_count", "metric_args": {"event": "click"}},
+            metric={"metric": "event_count", "metric_args": {"events": "click"}},
             complement=True,
         )
 
@@ -957,7 +957,7 @@ class TestMetricDistribution:
             SegmentOverview(stream).metric_distribution(
                 segment_col="segment",
                 segment_value=["segment_1", "segment_2"],
-                metric={"metric": "event_count", "metric_args": {"event": ["click", "purchase"]}},
+                metric={"metric": "event_count", "metric_args": {"events": ["click", "purchase"]}},
             )
 
     def test_has_multiple_events_error(self) -> None:

@@ -7,6 +7,7 @@ import traitlets
 from hopscotch.widgets._esm import _get_esm
 from hopscotch.widgets.cloud_mixin import CloudMixin
 from hopscotch.widgets._utils import parse_diff as _parse_diff
+from hopscotch.widgets._html_export import write_html
 
 _STATIC = pathlib.Path(__file__).parent.parent / "static"
 _UNSET = object()
@@ -168,6 +169,42 @@ class StepMatrixWidget(CloudMixin, anywidget.AnyWidget):
 
         return {"matrices": matrices, "event_counts": event_counts,
                 "event_counts_g1": event_counts_g1, "event_counts_g2": event_counts_g2}
+
+    # ── HTML export ───────────────────────────────────────────────────────────
+
+    def export_html(
+        self,
+        path: str,
+        title: str = "Step Matrix",
+        analysis: str | None = None,
+    ) -> None:
+        """
+        Export the step matrix as a standalone interactive HTML file.
+
+        Parameters
+        ----------
+        path:
+            Destination file path.
+        title:
+            Title shown in the browser tab.
+        analysis:
+            Optional analysis text. Supports basic markdown and [event] links.
+        """
+        data = {
+            "widget_type":      "step_matrix",
+            "result":           json.loads(self.result or "{}"),
+            "max_steps":        self.max_steps,
+            "diff":             json.loads(self.diff) if self.diff else None,
+            "path_id_col":      self.path_id_col or "",
+            "path_pattern":     self.path_pattern or "",
+            "path_cols":        json.loads(self.path_cols or "[]"),
+            "segment_levels":   json.loads(self.segment_levels or "{}"),
+            "event_list":       json.loads(self.event_list or "[]"),
+            "height":           self.height,
+            "sidebar_open":     False,
+            "display_prefs":    "{}",
+        }
+        write_html(path, title, "Step Matrix", data, analysis)
 
     # ── cloud state ────────────────────────────────────────────────────────────
 

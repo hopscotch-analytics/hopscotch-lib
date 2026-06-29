@@ -167,26 +167,6 @@ class TestCollapseEventsFromCol:
 
 
 # ---------------------------------------------------------------------------
-# Daily states mode
-# ---------------------------------------------------------------------------
-
-class TestCollapseEventsDailyStates:
-
-    def test_daily_states_first_row_is_new(self):
-        df = pd.DataFrame([
-            ["u1", "login", "2023-01-01 10:00:00"],
-            ["u1", "purchase", "2023-01-02 10:00:00"],
-        ], columns=["user_id", "event", "timestamp"])
-        stream = Eventstream(df)
-
-        # active_events not specified → all days are considered active
-        res = stream.collapse_events(daily_states={"max_dormant_days": 30})
-        states = res.df["event"].tolist()
-
-        assert states[0] == "new"
-
-
-# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 

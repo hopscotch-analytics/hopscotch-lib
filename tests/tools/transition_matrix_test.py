@@ -1,6 +1,7 @@
 import warnings
 
 import pandas as pd
+import pytest
 from hopscotch.eventstream.eventstream import Eventstream
 
 class TestTransitionMatrix:
@@ -269,6 +270,34 @@ class TestTransitionMatrix:
         expected.columns = pd.Index(["path_start", "A", "B", "path_end"], name="next_event")
 
         pd.testing.assert_frame_equal(res, expected)
+
+    def test__time_median_nat_cells_are_none_after_df_to_list(self):
+        """_df_to_list must convert pd.NaT to None, not raise on float(NaT)."""
+        from hopscotch.widgets.transition_graph import _df_to_list
+
+        df = pd.DataFrame([
+            ["user_1", "A", "2020-01-01 00:00:00"],
+            ["user_1", "B", "2020-01-01 00:02:00"],
+            ["user_2", "A", "2020-01-01 00:00:00"],
+            ["user_2", "B", "2020-01-01 00:03:00"],
+        ], columns=["user_id", "event", "timestamp"])
+        stream = Eventstream(df)
+        tm = stream.transition_graph_data(edge_weight="time_median")
+
+        rows = _df_to_list(tm)
+
+        events = tm.index.tolist()
+        a_idx = events.index("A")
+        b_idx = events.index("B")
+
+        # A→B: median of 120 s and 180 s = 150 s
+        assert rows[a_idx][b_idx] == pytest.approx(150.0)
+        # NaT cells (no such transition) must be None, not NaN or an exception
+        for row in rows:
+            for v in row:
+                assert v is None or isinstance(v, float)
+                if isinstance(v, float):
+                    assert v == v, "NaN must not appear in output"
 
     def test__time_q95(self):
         shifts = pd.Series([0] + [1]*101).cumsum().cumsum()

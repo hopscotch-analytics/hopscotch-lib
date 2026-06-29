@@ -95,7 +95,7 @@ class TestAddClusters:
         stream = Eventstream(df)
 
         features = [
-            {"metric": "event_count", "metric_args": {"event": "view"}},
+            {"metric": "event_count", "metric_args": {"events": "view"}},
             {"metric": "duration"},
         ]
 
@@ -262,7 +262,7 @@ class TestAddClusters:
             {"metric": "duration"},
             {"metric": "has", "metric_args": {"events": "purchase"}},
             {"metric": "has", "metric_args": {"events": "view"}},
-            {"metric": "event_count", "metric_args": {"event": "view"}},
+            {"metric": "event_count", "metric_args": {"events": "view"}},
         ]
 
         result = stream.add_clusters(
@@ -304,7 +304,7 @@ class TestAddClusters:
             {"metric": "length"},
             {"metric": "duration"},
             {"metric": "has", "metric_args": {"events": "purchase"}},
-            {"metric": "event_count", "metric_args": {"event": "view"}},
+            {"metric": "event_count", "metric_args": {"events": "view"}},
         ]
 
         result = stream.add_clusters(

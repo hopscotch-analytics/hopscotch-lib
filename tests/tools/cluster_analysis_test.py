@@ -171,7 +171,7 @@ class TestClusterAnalysis:
                 {"metric": "length"},
                 {"metric": "duration"},
                 {"metric": "has", "metric_args": {"events": "purchase"}},
-                {"metric": "event_count", "metric_args": {"event": "view"}},
+                {"metric": "event_count", "metric_args": {"events": "view"}},
             ],
             method="kmeans",
             n_clusters=2,
